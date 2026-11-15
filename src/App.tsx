@@ -1,32 +1,311 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Heart,
+  Lock,
   Menu,
   Search,
   ShoppingBag,
   X,
 } from 'lucide-react';
+import heroPerfumeImg from './assets/images/hero_perfume_hub_1794745148328.jpg';
+import nocturneOudImg from './assets/images/perfume_nocturne_oud_1794745148461.jpg';
+import bergamotNoirImg from './assets/images/perfume_bergamot_noir_1794745148662.jpg';
+import velvetRoseImg from './assets/images/perfume_velvet_rose_1794745148820.jpg';
+import saffronElixirImg from './assets/images/perfume_saffron_elixir_1794745149182.jpg';
+import coastalVetiverImg from './assets/images/perfume_coastal_vetiver_1794745149402.jpg';
+import vanillaAmberImg from './assets/images/perfume_vanilla_amber_1794745149964.jpg';
+import whiteMuskImg from './assets/images/perfume_white_musk_1794745150289.jpg';
+import discoveryDecantsImg from './assets/images/perfume_discovery_decants_1794745150558.jpg';
 import {
-  CATEGORY_SHOWCASE,
-  HERO_IMAGE,
-  PERFUMES,
   USP_PILLARS,
-  type BottleSize,
+  type CartItem,
+  type CategoryShowcaseItem,
   type CollectionType,
   type FilterCategory,
-  type PerfumeProduct,
+  type Product,
+  type SizeOption,
 } from './data/perfumes';
 import { ResilientImage } from './components/ResilientImage';
 import { ProductCard } from './components/ProductCard';
 import { QuickViewModal } from './components/QuickViewModal';
-import { CartDrawer, type CartItem } from './components/CartDrawer';
+import { CartDrawer } from './components/CartDrawer';
 import { ScentFinderModal } from './components/ScentFinderModal';
 import { PolicyModal, type PolicyType } from './components/PolicyModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
 
+const STORAGE_KEY = 'perfume_hub_bd_catalog_v1';
 const FILTER_TABS: FilterCategory[] = ['All', 'Men', 'Women', 'Unisex', 'Arabian'];
 
+const FALLBACK_HERO_URL =
+  'https://images.unsplash.com/photo-1594035910387-fea47794261f?auto=format&fit=crop&w=1400&q=80';
+const FALLBACK_BOTTLE_URL =
+  'https://images.unsplash.com/photo-1541643600914-78b084683601?auto=format&fit=crop&w=900&q=80';
+
+const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: 'nuit-de-lambre-oud',
+    name: "Nuit de L'Ambre Oud",
+    subtitle: 'Smoked Amber & Cambodian Oud',
+    category: 'Men',
+    collection: 'Signature Blends',
+    concentration: 'Extrait de Parfum · 36% Oil',
+    badge: 'Bestseller',
+    image: nocturneOudImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Calabrian Bergamot', 'Black Pepper', 'Cardamom'],
+      middle: ['Smoked Labdanum', 'Turkish Rose', 'Incense'],
+      base: ['Cambodian Oud', 'Golden Amber', 'Atlas Cedar'],
+      summary: 'Bergamot · Amber · Oud',
+    },
+    longevity: { score: 94, label: '11–12 Hours' },
+    projection: { score: 88, label: 'Strong Arm-Length' },
+    weatherFit: 'Evening events, weddings & AC offices',
+    moods: ['Evening', 'Festive', 'Signature'],
+    description:
+      'A commanding dark-amber composition balanced with crisp bergamot lift so it never turns cloying in Dhaka’s warm evenings.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 650, '30ml': 1550, '50ml': 2350, '100ml': 3500 },
+    inStock: true,
+  },
+  {
+    id: 'aura-noir-edp',
+    name: 'Aura Noir',
+    subtitle: 'Designer Inspired Charcoal Citrus',
+    category: 'Men',
+    collection: 'Designer Decants',
+    concentration: 'Eau de Parfum · 28% Oil',
+    badge: 'Long Lasting',
+    image: bergamotNoirImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Blood Grapefruit', 'Sicilian Lemon', 'Pink Pepper'],
+      middle: ['Haitian Vetiver', 'Geranium Leaf', 'Elemi'],
+      base: ['Ambroxan', 'White Cedar', 'Mineral Musk'],
+      summary: 'Grapefruit · Ambroxan · Vetiver',
+    },
+    longevity: { score: 86, label: '8–10 Hours' },
+    projection: { score: 84, label: 'Radiant Trail' },
+    weatherFit: 'All-day Dhaka commute & humid afternoons',
+    moods: ['Office', 'Humid Heat', 'Signature'],
+    description:
+      'Razor-sharp citrus and clean ambroxan engineered to cut cleanly through high heat and coastal humidity from morning to night.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 520, '30ml': 1290, '50ml': 1950, '100ml': 2950 },
+    inStock: true,
+  },
+  {
+    id: 'rose-gold-elixir',
+    name: 'Rose-Gold Elixir',
+    subtitle: 'Damask Rose & Cashmere Musk',
+    category: 'Women',
+    collection: 'Signature Blends',
+    concentration: 'Extrait de Parfum · 34% Oil',
+    badge: 'Bestseller',
+    image: velvetRoseImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Dewy Lychee', 'Pear Blossom', 'Bergamot'],
+      middle: ['Damask Rose', 'Peony', 'Jasmine Sambac'],
+      base: ['Cashmere Wood', 'Velvet Musk', 'Madagascar Vanilla'],
+      summary: 'Lychee · Damask Rose · Cashmeran',
+    },
+    longevity: { score: 90, label: '9–11 Hours' },
+    projection: { score: 80, label: 'Soft Aura' },
+    weatherFit: 'Day-to-dinner elegance & brunch gatherings',
+    moods: ['Signature', 'Office', 'Festive'],
+    description:
+      'Luminous petals steeped in airy cashmere musk—feminine, modern, and effortlessly lingering on silk and skin.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 580, '30ml': 1390, '50ml': 2100, '100ml': 3150 },
+    inStock: true,
+  },
+  {
+    id: 'oud-al-sultan',
+    name: 'Oud Al-Sultan',
+    subtitle: 'Royal Saffron & Taif Rose Attar',
+    category: 'Arabian',
+    collection: 'Middle Eastern Lux',
+    concentration: 'Pure Extrait · 40% Oil',
+    badge: 'Long Lasting',
+    image: saffronElixirImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Kashmiri Saffron', 'Nutmeg', 'Cinnamon Bark'],
+      middle: ['Taif Rose', 'Praline', 'Guaiac Wood'],
+      base: ['Aged Agarwood', 'Suede Leather', 'Benzoin'],
+      summary: 'Saffron · Taif Rose · Leather Oud',
+    },
+    longevity: { score: 97, label: '12+ Hours' },
+    projection: { score: 94, label: 'Room-Filling' },
+    weatherFit: 'Eid, formal receptions & cool nights',
+    moods: ['Festive', 'Evening'],
+    description:
+      'Opulent Arabian perfumery crafted in small batches—spiced saffron ribbons folded into smoky aged agarwood and burnished leather.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 690, '30ml': 1650, '50ml': 2490, '100ml': 3500 },
+    inStock: true,
+  },
+  {
+    id: 'laurel-and-oak',
+    name: 'Laurel & Oak',
+    subtitle: 'Botanical Vetiver & Fig Leaf',
+    category: 'Unisex',
+    collection: 'Designer Decants',
+    concentration: 'Eau de Parfum · 26% Oil',
+    badge: 'New',
+    image: coastalVetiverImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Crushed Fig Leaf', 'Mandarin Zest', 'Petitgrain'],
+      middle: ['Bay Laurel', 'Clary Sage', 'Green Tea'],
+      base: ['Oakmoss', 'Java Vetiver', 'Dry Cedar'],
+      summary: 'Fig Leaf · Vetiver · Oakmoss',
+    },
+    longevity: { score: 84, label: '8–9 Hours' },
+    projection: { score: 76, label: 'Crisp Personal Bubble' },
+    weatherFit: 'Peak summer heat, campus & studio wear',
+    moods: ['Humid Heat', 'Office'],
+    description:
+      'Breezy green botanicals and earthy vetiver roots that feel like stepping into shaded monsoon rain.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 480, '30ml': 1190, '50ml': 1850, '100ml': 2790 },
+    inStock: true,
+  },
+  {
+    id: 'ambre-cognac-reserve',
+    name: 'Ambre Cognac Reserve',
+    subtitle: 'Spiced Vanilla & Roasted Tonka',
+    category: 'Unisex',
+    collection: 'Middle Eastern Lux',
+    concentration: 'Extrait de Parfum · 35% Oil',
+    badge: 'Limited Edition',
+    image: vanillaAmberImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Ceylon Cinnamon', 'Plum Nectar', 'Cardamom'],
+      middle: ['Aged Cognac Accord', 'Roasted Tonka', 'Myrrh'],
+      base: ['Bourbon Vanilla', 'Praline Amber', 'Sandalwood'],
+      summary: 'Cinnamon · Cognac · Bourbon Vanilla',
+    },
+    longevity: { score: 92, label: '10–12 Hours' },
+    projection: { score: 86, label: 'Warm Sillage' },
+    weatherFit: 'Date nights, winter evenings & lounges',
+    moods: ['Evening', 'Festive'],
+    description:
+      'Velvety cognac warmth draped over toasted tonka bean and dark vanilla—intoxicating without ever turning sugary.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 620, '30ml': 1490, '50ml': 2250, '100ml': 3350 },
+    inStock: true,
+  },
+  {
+    id: 'aurelia-white-musk',
+    name: 'Aurélia White Musk',
+    subtitle: 'Alabaster Iris & Clean Skin Musk',
+    category: 'Women',
+    collection: 'Designer Decants',
+    concentration: 'Eau de Parfum · 30% Oil',
+    badge: 'New',
+    image: whiteMuskImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['White Pear', 'Aldehydes', 'Neroli'],
+      middle: ['Florentine Iris', 'Cotton Flower', 'White Tea'],
+      base: ['Ambrette Seed', 'Creamy Sandalwood', 'Clean Musk'],
+      summary: 'Pear · Orris Butter · White Musk',
+    },
+    longevity: { score: 85, label: '8–10 Hours' },
+    projection: { score: 74, label: 'Intimate & Airy' },
+    weatherFit: 'Daily signature, humid mornings & gifting',
+    moods: ['Office', 'Humid Heat', 'Signature'],
+    description:
+      'Press-laundered linen meets powdery iris and warm skin musk—an understated second-skin signature for any season.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 490, '30ml': 1220, '50ml': 1890, '100ml': 2850 },
+    inStock: true,
+  },
+  {
+    id: 'atelier-discovery-quartet',
+    name: 'Atelier Discovery Quartet',
+    subtitle: '4-Piece Curated Decant Vault',
+    category: 'Combo Offers',
+    collection: 'Discovery Sets',
+    concentration: 'Extrait & EDP Assortment',
+    badge: 'Bestseller',
+    image: discoveryDecantsImg,
+    fallbackImage: FALLBACK_BOTTLE_URL,
+    scentNotes: {
+      top: ['Bergamot & Saffron', 'Lychee & Green Fig'],
+      middle: ['Damask Rose', 'Vetiver & Cognac'],
+      base: ['Cambodian Oud', 'White Musk & Vanilla'],
+      summary: 'Oud · Bergamot · Rose · Amber',
+    },
+    longevity: { score: 91, label: '9–12 Hours Avg' },
+    projection: { score: 85, label: 'Balanced Wardrobe' },
+    weatherFit: 'Day, night & gifting wardrobe in travel sleeves',
+    moods: ['Signature', 'Office', 'Evening', 'Humid Heat', 'Festive'],
+    description:
+      'Experience four bestselling houses in precision-measured glass atomizers with brushed gold casings—ideal for sampling or travel.',
+    availableSizes: ['10ml', '30ml', '50ml', '100ml'],
+    prices: { '10ml': 450, '30ml': 1350, '50ml': 2150, '100ml': 3200 },
+    inStock: true,
+  },
+];
+
+const CATEGORY_SHOWCASE: CategoryShowcaseItem[] = [
+  {
+    id: 'designer-decants',
+    title: 'Designer Decants',
+    kicker: 'Authentic Vials',
+    description: 'Precision-measured 10ml–100ml draws from iconic luxury houses.',
+    image: bergamotNoirImg,
+    targetFilter: 'All',
+    targetCollection: 'Designer Decants',
+  },
+  {
+    id: 'middle-eastern-lux',
+    title: 'Middle Eastern Lux',
+    kicker: 'Arabian Extrait',
+    description: 'Resinous oud, royal saffron, and Taif rose with commanding sillage.',
+    image: saffronElixirImg,
+    targetFilter: 'All',
+    targetCollection: 'Middle Eastern Lux',
+  },
+  {
+    id: 'signature-blends',
+    title: 'Signature Blends',
+    kicker: 'House Formulations',
+    description: 'High-oil custom impressions calibrated for tropical humidity.',
+    image: velvetRoseImg,
+    targetFilter: 'All',
+    targetCollection: 'Signature Blends',
+  },
+  {
+    id: 'discovery-sets',
+    title: 'Discovery Sets & Combos',
+    kicker: 'Curated Wardrobes',
+    description: 'Multi-scent travel atomizers crafted for gifting and exploration.',
+    image: discoveryDecantsImg,
+    targetFilter: 'All',
+    targetCollection: 'Discovery Sets',
+  },
+];
+
+function loadStoredProducts(): Product[] {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULT_PRODUCTS;
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_PRODUCTS;
+    return parsed as Product[];
+  } catch {
+    return DEFAULT_PRODUCTS;
+  }
+}
+
 export default function App() {
+  const [products, setProducts] = useState<Product[]>(loadStoredProducts);
   const [bannerVisible, setBannerVisible] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -41,12 +320,21 @@ export default function App() {
   const [cartOpen, setCartOpen] = useState(false);
 
   const [quickViewState, setQuickViewState] = useState<{
-    product: PerfumeProduct | null;
-    size: BottleSize;
+    product: Product | null;
+    size: SizeOption;
   }>({ product: null, size: '30ml' });
 
   const [scentFinderOpen, setScentFinderOpen] = useState(false);
   const [activePolicy, setActivePolicy] = useState<PolicyType>(null);
+  const [adminOpen, setAdminOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
+    } catch {
+      // Ignore quota errors if storage is full
+    }
+  }, [products]);
 
   const totalCartCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
@@ -55,17 +343,28 @@ export default function App() {
 
   const filteredProducts = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return PERFUMES.filter((p) => {
+    return products.filter((p) => {
       if (wishlistOnly && !wishlist.includes(p.id)) return false;
-      if (activeCollection && p.collection !== activeCollection) return false;
+
+      if (activeCollection) {
+        const matchesCollection =
+          p.collection === activeCollection ||
+          (activeCollection === 'Designer Decants' && p.category === 'Designer Decants') ||
+          (activeCollection === 'Discovery Sets' && p.category === 'Combo Offers') ||
+          (activeCollection === 'Middle Eastern Lux' && p.category === 'Arabian');
+        if (!matchesCollection) return false;
+      }
+
       if (activeFilter !== 'All' && p.category !== activeFilter) return false;
+
       if (query) {
-        const haystack = `${p.name} ${p.subtitle} ${p.category} ${p.collection} ${p.notesLine}`.toLowerCase();
+        const haystack =
+          `${p.name} ${p.subtitle} ${p.category} ${p.collection} ${p.scentNotes.summary}`.toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       return true;
     });
-  }, [activeFilter, activeCollection, wishlistOnly, wishlist, searchQuery]);
+  }, [products, activeFilter, activeCollection, wishlistOnly, wishlist, searchQuery]);
 
   const scrollToCollection = () => {
     const el = document.getElementById('collection');
@@ -86,9 +385,10 @@ export default function App() {
     );
   };
 
-  const handleAddToCart = (product: PerfumeProduct, size: BottleSize, quantity = 1) => {
+  const handleAddToCart = (product: Product, size: SizeOption, quantity = 1) => {
+    if (!product.inStock) return;
     const key = `${product.id}__${size}`;
-    const unitPrice = product.prices[size];
+    const unitPrice = product.prices[size] ?? 0;
     setCart((prev) => {
       const existing = prev.find((item) => item.key === key);
       if (existing) {
@@ -115,6 +415,32 @@ export default function App() {
     setCart((prev) => prev.filter((item) => item.key !== key));
   };
 
+  const handleSaveProduct = (savedProduct: Product) => {
+    setProducts((prev) => {
+      const exists = prev.some((p) => p.id === savedProduct.id);
+      if (exists) {
+        return prev.map((p) => (p.id === savedProduct.id ? savedProduct : p));
+      }
+      return [savedProduct, ...prev];
+    });
+  };
+
+  const handleDeleteProduct = (id: string) => {
+    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setWishlist((prev) => prev.filter((w) => w !== id));
+  };
+
+  const handleToggleStock = (id: string) => {
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, inStock: !p.inStock } : p))
+    );
+  };
+
+  const handleResetCatalog = () => {
+    setProducts(DEFAULT_PRODUCTS);
+    window.localStorage.removeItem(STORAGE_KEY);
+  };
+
   const resetAllFilters = () => {
     setActiveFilter('All');
     setActiveCollection(null);
@@ -124,7 +450,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#1A1A1A]">
-      {/* Sticky Top Wrapper (Announcement Bar + Navigation Header) */}
+      {/* Sticky Top Wrapper */}
       <div className="sticky top-0 z-40">
         {bannerVisible && (
           <div className="bg-[#121212] text-[#C5A059] border-b border-[#C5A059]/20 px-4 py-1.5 text-[11px] sm:text-xs">
@@ -150,7 +476,7 @@ export default function App() {
         {/* Sticky Navigation Header */}
         <header className="bg-[#121212]/96 backdrop-blur-md text-[#FAF9F6] border-b border-white/10">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 lg:gap-8">
-            {/* Left Zone: Minimalist Menu Links (Desktop) / Menu Button (Mobile) */}
+            {/* Left: Menu Links / Mobile Button */}
             <div className="flex items-center lg:flex-1">
               <button
                 type="button"
@@ -182,7 +508,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleNavCollection('Arabian', 'Middle Eastern Lux')}
+                  onClick={() => handleNavCollection('All', 'Middle Eastern Lux')}
                   className="hover:text-[#C5A059] transition-colors whitespace-nowrap shrink-0 py-1 border-b border-transparent hover:border-[#C5A059]"
                 >
                   Middle Eastern
@@ -204,7 +530,7 @@ export default function App() {
               </nav>
             </div>
 
-            {/* Center Zone: Brand Logo Wordmark */}
+            {/* Center: Brand Logo */}
             <a
               href="#top"
               onClick={(e) => {
@@ -216,7 +542,7 @@ export default function App() {
               PERFUME HUB <span className="text-[#C5A059]">BD</span>
             </a>
 
-            {/* Right Zone: Search, Wishlist & Cart */}
+            {/* Right: Search, Wishlist, Cart */}
             <div className="flex items-center justify-end gap-2 sm:gap-3 lg:flex-1 shrink-0">
               <button
                 type="button"
@@ -264,7 +590,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Expandable Search Bar */}
           {searchOpen && (
             <div className="border-t border-white/10 bg-[#171717] px-4 sm:px-6 lg:px-8 py-3">
               <div className="mx-auto max-w-2xl flex items-center gap-3">
@@ -293,7 +618,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Mobile Menu Drawer */}
           {mobileMenuOpen && (
             <nav
               aria-label="Mobile navigation"
@@ -301,10 +625,26 @@ export default function App() {
             >
               {[
                 { label: 'Shop All', filter: 'All' as FilterCategory, collection: null },
-                { label: 'Designer', filter: 'All' as FilterCategory, collection: 'Designer Decants' as CollectionType },
-                { label: 'Middle Eastern', filter: 'Arabian' as FilterCategory, collection: 'Middle Eastern Lux' as CollectionType },
-                { label: 'Decants & Signatures', filter: 'All' as FilterCategory, collection: 'Signature Blends' as CollectionType },
-                { label: 'Combo Offers', filter: 'All' as FilterCategory, collection: 'Discovery Sets' as CollectionType },
+                {
+                  label: 'Designer',
+                  filter: 'All' as FilterCategory,
+                  collection: 'Designer Decants' as CollectionType,
+                },
+                {
+                  label: 'Middle Eastern',
+                  filter: 'All' as FilterCategory,
+                  collection: 'Middle Eastern Lux' as CollectionType,
+                },
+                {
+                  label: 'Decants & Signatures',
+                  filter: 'All' as FilterCategory,
+                  collection: 'Signature Blends' as CollectionType,
+                },
+                {
+                  label: 'Combo Offers',
+                  filter: 'All' as FilterCategory,
+                  collection: 'Discovery Sets' as CollectionType,
+                },
               ].map((item) => (
                 <button
                   key={item.label}
@@ -332,10 +672,9 @@ export default function App() {
       </div>
 
       <main id="top" className="flex-1">
-        {/* Hero Editorial Section */}
+        {/* Hero Section */}
         <section className="relative bg-[#121212] text-[#FAF9F6] overflow-hidden">
           <div className="mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-12 items-stretch min-h-[540px] lg:min-h-[620px]">
-            {/* Hero Copy Column */}
             <div className="lg:col-span-6 relative z-10 flex flex-col justify-center px-6 sm:px-10 lg:px-12 py-14 lg:py-20">
               <span className="text-xs uppercase tracking-[0.22em] text-[#C5A059] font-medium">
                 Dhaka · Curated Extrait &amp; Decants
@@ -366,7 +705,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Grounded Proof Metrics Row */}
               <div className="mt-12 pt-6 border-t border-white/10 grid grid-cols-3 gap-6 max-w-md">
                 <div>
                   <span className="block font-serif text-2xl font-semibold text-[#C5A059] tabular-nums">
@@ -395,10 +733,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* Hero Photography Column */}
             <div className="lg:col-span-6 relative min-h-[300px] lg:min-h-full">
               <ResilientImage
-                src={HERO_IMAGE}
+                src={heroPerfumeImg}
+                fallbackSrc={FALLBACK_HERO_URL}
                 alt="Perfume Hub BD dark obsidian and gold crystal fragrance bottles"
                 title="Perfume Hub BD Atelier"
                 className="w-full h-full object-cover object-center"
@@ -412,7 +750,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Category Showcase (4 Interactive Editorial Cards) */}
+        {/* Category Showcase */}
         <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
             <div>
@@ -435,7 +773,7 @@ export default function App() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => handleNavCollection('All', cat.targetCollection ?? null)}
+                  onClick={() => handleNavCollection(cat.targetFilter, cat.targetCollection ?? null)}
                   className={`group text-left flex flex-col bg-[#FAF9F6] border transition-all duration-200 hover:-translate-y-0.5 ${
                     isSelected
                       ? 'border-[#C5A059] shadow-[0_12px_28px_-14px_rgba(18,18,18,0.2)]'
@@ -445,6 +783,7 @@ export default function App() {
                   <div className="aspect-[4/3] w-full overflow-hidden bg-[#EFECE6]">
                     <ResilientImage
                       src={cat.image}
+                      fallbackSrc={FALLBACK_BOTTLE_URL}
                       alt={cat.title}
                       title={cat.title}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
@@ -464,7 +803,8 @@ export default function App() {
                       </p>
                     </div>
                     <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#1A1A1A] group-hover:text-[#8C6D3B]">
-                      Browse House <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                      Browse House{' '}
+                      <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                     </span>
                   </div>
                 </button>
@@ -473,7 +813,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* Interactive Product Grid ("Bestsellers & Trending") */}
+        {/* Interactive Product Grid */}
         <section
           id="collection"
           className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-20 scroll-mt-24"
@@ -492,7 +832,6 @@ export default function App() {
               </h2>
             </div>
 
-            {/* Category Filter Tabs */}
             <div className="flex flex-wrap items-center gap-2">
               <div
                 role="tablist"
@@ -535,11 +874,11 @@ export default function App() {
             </div>
           </div>
 
-          {/* Active Context Line */}
           {(activeCollection || searchQuery || wishlistOnly) && (
             <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[#666666]">
               <span>
-                Showing <strong className="text-[#1A1A1A] tabular-nums">{filteredProducts.length}</strong>{' '}
+                Showing{' '}
+                <strong className="text-[#1A1A1A] tabular-nums">{filteredProducts.length}</strong>{' '}
                 {filteredProducts.length === 1 ? 'fragrance' : 'fragrances'}
               </span>
               {activeCollection && (
@@ -563,7 +902,6 @@ export default function App() {
             </div>
           )}
 
-          {/* Product Grid */}
           {filteredProducts.length > 0 ? (
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {filteredProducts.map((product) => (
@@ -648,7 +986,6 @@ export default function App() {
       <footer className="bg-[#0D0D0D] text-[#FAF9F6] pt-16 pb-10 border-t border-white/10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-12 border-b border-white/10">
-            {/* Brand Bio */}
             <div className="md:col-span-5">
               <span className="font-serif text-2xl font-bold tracking-[0.22em] text-[#FAF9F6]">
                 PERFUME HUB <span className="text-[#C5A059]">BD</span>
@@ -676,7 +1013,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick Links */}
             <div className="md:col-span-3">
               <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[#C5A059]">
                 Quick Links
@@ -703,7 +1039,7 @@ export default function App() {
                 <li>
                   <button
                     type="button"
-                    onClick={() => handleNavCollection('Arabian', 'Middle Eastern Lux')}
+                    onClick={() => handleNavCollection('All', 'Middle Eastern Lux')}
                     className="hover:text-[#FAF9F6] transition-colors"
                   >
                     Middle Eastern Lux
@@ -721,7 +1057,6 @@ export default function App() {
               </ul>
             </div>
 
-            {/* Customer Care & Payment Badges */}
             <div className="md:col-span-4">
               <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-[#C5A059]">
                 Customer Care
@@ -776,7 +1111,18 @@ export default function App() {
 
           <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#FAF9F6]/50">
             <p>© {new Date().getFullYear()} Perfume Hub BD. All rights reserved.</p>
-            <p>Banani, Dhaka · Nationwide Courier Dispatch</p>
+            <div className="flex items-center gap-5">
+              <span>Banani, Dhaka · Nationwide Courier Dispatch</span>
+              <button
+                type="button"
+                onClick={() => setAdminOpen(true)}
+                aria-label="Open Admin Studio"
+                className="inline-flex items-center gap-1.5 text-[#FAF9F6]/55 hover:text-[#C5A059] transition-colors"
+              >
+                <Lock className="h-3.5 w-3.5" />
+                <span>Admin</span>
+              </button>
+            </div>
           </div>
         </div>
       </footer>
@@ -804,12 +1150,25 @@ export default function App() {
 
       <ScentFinderModal
         isOpen={scentFinderOpen}
+        products={products}
         onClose={() => setScentFinderOpen(false)}
         onSelectProduct={(product, size) => setQuickViewState({ product, size })}
         onAddToCart={(product, size) => handleAddToCart(product, size, 1)}
       />
 
       <PolicyModal policy={activePolicy} onClose={() => setActivePolicy(null)} />
+
+      <AdminPanelModal
+        isOpen={adminOpen}
+        products={products}
+        defaultImageFallback={nocturneOudImg}
+        onClose={() => setAdminOpen(false)}
+        onSaveProduct={handleSaveProduct}
+        onDeleteProduct={handleDeleteProduct}
+        onToggleStock={handleToggleStock}
+        onImportProducts={(imported) => setProducts(imported)}
+        onResetCatalog={handleResetCatalog}
+      />
     </div>
   );
 }

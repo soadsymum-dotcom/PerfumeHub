@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface ResilientImageProps {
   src: string;
+  fallbackSrc?: string;
   alt: string;
   title?: string;
   className?: string;
@@ -10,14 +11,29 @@ interface ResilientImageProps {
 
 export function ResilientImage({
   src,
+  fallbackSrc,
   alt,
   title,
   className = 'w-full h-full object-cover',
   containerClassName = '',
 }: ResilientImageProps) {
+  const [currentSrc, setCurrentSrc] = useState(src);
   const [hasError, setHasError] = useState(false);
 
-  if (hasError || !src) {
+  useEffect(() => {
+    setCurrentSrc(src);
+    setHasError(false);
+  }, [src]);
+
+  const handleError = () => {
+    if (fallbackSrc && currentSrc !== fallbackSrc) {
+      setCurrentSrc(fallbackSrc);
+      return;
+    }
+    setHasError(true);
+  };
+
+  if (hasError || !currentSrc) {
     return (
       <div
         className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#1C1A17] via-[#121212] to-[#262016] text-[#C5A059] p-6 text-center ${containerClassName}`}
@@ -46,10 +62,10 @@ export function ResilientImage({
 
   return (
     <img
-      src={src}
+      src={currentSrc}
       alt={alt}
       referrerPolicy="no-referrer"
-      onError={() => setHasError(true)}
+      onError={handleError}
       className={className}
     />
   );

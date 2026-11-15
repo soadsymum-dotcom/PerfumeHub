@@ -1,27 +1,49 @@
 import { useMemo, useState } from 'react';
 import { ArrowRight, X } from 'lucide-react';
-import { PERFUMES, type BottleSize, type PerfumeProduct } from '../data/perfumes';
+import type { Product, SizeOption } from '../data/perfumes';
 import { ResilientImage } from './ResilientImage';
 
 interface ScentFinderModalProps {
   isOpen: boolean;
+  products: Product[];
   onClose: () => void;
-  onSelectProduct: (product: PerfumeProduct, size: BottleSize) => void;
-  onAddToCart: (product: PerfumeProduct, size: BottleSize) => void;
+  onSelectProduct: (product: Product, size: SizeOption) => void;
+  onAddToCart: (product: Product, size: SizeOption) => void;
 }
 
-type MoodOption = PerfumeProduct['moods'][number];
+type MoodOption = Product['moods'][number];
 
 const MOOD_OPTIONS: { id: MoodOption; label: string; caption: string }[] = [
-  { id: 'Humid Heat', label: 'Dhaka Daytime & Heat', caption: 'Crisp citrus, vetiver & clean musk that stay sharp in humidity.' },
-  { id: 'Office', label: 'Executive & Studio', caption: 'Refined, approachable sillage tailored for air-conditioned spaces.' },
-  { id: 'Evening', label: 'Evening & Date Night', caption: 'Warm cognac, smoked amber & sensual vanilla accords.' },
-  { id: 'Festive', label: 'Weddings & Eid', caption: 'Commanding saffron, Taif rose & rich agarwood longevity.' },
-  { id: 'Signature', label: 'All-Season Signature', caption: 'Versatile daily signatures with balanced projection.' },
+  {
+    id: 'Humid Heat',
+    label: 'Dhaka Daytime & Heat',
+    caption: 'Crisp citrus, vetiver & clean musk that stay sharp in humidity.',
+  },
+  {
+    id: 'Office',
+    label: 'Executive & Studio',
+    caption: 'Refined, approachable sillage tailored for air-conditioned spaces.',
+  },
+  {
+    id: 'Evening',
+    label: 'Evening & Date Night',
+    caption: 'Warm cognac, smoked amber & sensual vanilla accords.',
+  },
+  {
+    id: 'Festive',
+    label: 'Weddings & Eid',
+    caption: 'Commanding saffron, Taif rose & rich agarwood longevity.',
+  },
+  {
+    id: 'Signature',
+    label: 'All-Season Signature',
+    caption: 'Versatile daily signatures with balanced projection.',
+  },
 ];
 
 export function ScentFinderModal({
   isOpen,
+  products,
   onClose,
   onSelectProduct,
   onAddToCart,
@@ -30,13 +52,19 @@ export function ScentFinderModal({
   const [preference, setPreference] = useState<'All' | 'Men' | 'Women' | 'Unisex' | 'Arabian'>('All');
 
   const matches = useMemo(() => {
-    const filtered = PERFUMES.filter((p) => {
+    const inStockList = products.filter((p) => p.inStock);
+    const pool = inStockList.length > 0 ? inStockList : products;
+
+    const filtered = pool.filter((p) => {
       const moodMatch = p.moods.includes(selectedMood);
       const catMatch = preference === 'All' || p.category === preference;
       return moodMatch && catMatch;
     });
-    return filtered.length > 0 ? filtered.slice(0, 3) : PERFUMES.filter((p) => p.moods.includes(selectedMood)).slice(0, 3);
-  }, [selectedMood, preference]);
+
+    if (filtered.length > 0) return filtered.slice(0, 3);
+    const moodOnly = pool.filter((p) => p.moods.includes(selectedMood));
+    return moodOnly.length > 0 ? moodOnly.slice(0, 3) : pool.slice(0, 3);
+  }, [products, selectedMood, preference]);
 
   if (!isOpen) return null;
 
@@ -71,7 +99,6 @@ export function ScentFinderModal({
           Select where you plan to wear your fragrance and your preferred profile to view tailored Extrait and EDP pairings.
         </p>
 
-        {/* Step 1: Occasion / Weather */}
         <div className="mt-6">
           <span className="block text-xs uppercase tracking-[0.14em] text-[#FAF9F6]/60 mb-2.5">
             01. Occasion &amp; Climate
@@ -100,7 +127,6 @@ export function ScentFinderModal({
           </p>
         </div>
 
-        {/* Step 2: Profile */}
         <div className="mt-5">
           <span className="block text-xs uppercase tracking-[0.14em] text-[#FAF9F6]/60 mb-2.5">
             02. Scent Profile
@@ -126,66 +152,73 @@ export function ScentFinderModal({
           </div>
         </div>
 
-        {/* Recommendations */}
         <div className="mt-6 pt-6 border-t border-white/10">
           <span className="block text-xs uppercase tracking-[0.14em] text-[#C5A059] mb-3">
             Recommended Pairings
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {matches.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col bg-[#1A1A1A] border border-white/10 overflow-hidden"
-              >
-                <div className="aspect-[4/3] w-full overflow-hidden bg-[#222]">
-                  <ResilientImage
-                    src={item.image}
-                    alt={item.name}
-                    title={item.name}
-                    className="w-full h-full object-cover"
-                    containerClassName="w-full h-full"
-                  />
-                </div>
-                <div className="p-3.5 flex flex-1 flex-col justify-between">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-[#C5A059]">
-                      {item.category} · {item.longevity.label}
-                    </span>
-                    <h3 className="mt-1 font-serif text-lg font-medium text-[#FAF9F6]">
-                      {item.name}
-                    </h3>
-                    <p className="mt-0.5 text-[11px] text-[#FAF9F6]/65">{item.notesLine}</p>
+            {matches.map((item) => {
+              const starterSize: SizeOption = item.availableSizes[0] ?? '10ml';
+              const starterPrice = item.prices[starterSize] ?? 0;
+              return (
+                <div
+                  key={item.id}
+                  className="flex flex-col bg-[#1A1A1A] border border-white/10 overflow-hidden"
+                >
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-[#222]">
+                    <ResilientImage
+                      src={item.image}
+                      fallbackSrc={item.fallbackImage}
+                      alt={item.name}
+                      title={item.name}
+                      className="w-full h-full object-cover"
+                      containerClassName="w-full h-full"
+                    />
                   </div>
-                  <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold tabular-nums text-[#FAF9F6]">
-                      From ৳{item.prices['10ml'].toLocaleString('en-US')}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onClose();
-                          onSelectProduct(item, '30ml');
-                        }}
-                        className="text-[11px] uppercase tracking-wider text-[#FAF9F6]/80 hover:text-[#C5A059] flex items-center gap-1"
-                      >
-                        Notes <ArrowRight className="h-3 w-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onAddToCart(item, '10ml');
-                          onClose();
-                        }}
-                        className="bg-[#C5A059] text-[#121212] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider hover:bg-[#FAF9F6] transition-colors"
-                      >
-                        Try 10ml
-                      </button>
+                  <div className="p-3.5 flex flex-1 flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-[#C5A059]">
+                        {item.category} · {item.longevity.label}
+                      </span>
+                      <h3 className="mt-1 font-serif text-lg font-medium text-[#FAF9F6]">
+                        {item.name}
+                      </h3>
+                      <p className="mt-0.5 text-[11px] text-[#FAF9F6]/65">
+                        {item.scentNotes.summary}
+                      </p>
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold tabular-nums text-[#FAF9F6]">
+                        From ৳{starterPrice.toLocaleString('en-US')}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onSelectProduct(item, item.availableSizes[1] ?? starterSize);
+                          }}
+                          className="text-[11px] uppercase tracking-wider text-[#FAF9F6]/80 hover:text-[#C5A059] flex items-center gap-1"
+                        >
+                          Notes <ArrowRight className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!item.inStock}
+                          onClick={() => {
+                            onAddToCart(item, starterSize);
+                            onClose();
+                          }}
+                          className="bg-[#C5A059] text-[#121212] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider hover:bg-[#FAF9F6] disabled:opacity-50 transition-colors"
+                        >
+                          Try {starterSize}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

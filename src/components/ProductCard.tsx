@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Eye, Heart, ShoppingBag } from 'lucide-react';
-import { BOTTLE_SIZES, type BottleSize, type PerfumeProduct } from '../data/perfumes';
+import { BOTTLE_SIZES, type Product, type SizeOption } from '../data/perfumes';
 import { ResilientImage } from './ResilientImage';
 
 interface ProductCardProps {
-  product: PerfumeProduct;
+  product: Product;
   isWishlisted: boolean;
   onToggleWishlist: (id: string) => void;
-  onQuickView: (product: PerfumeProduct, selectedSize: BottleSize) => void;
-  onAddToCart: (product: PerfumeProduct, size: BottleSize) => void;
+  onQuickView: (product: Product, selectedSize: SizeOption) => void;
+  onAddToCart: (product: Product, size: SizeOption) => void;
 }
 
 export function ProductCard({
@@ -18,12 +18,23 @@ export function ProductCard({
   onQuickView,
   onAddToCart,
 }: ProductCardProps) {
-  const [selectedSize, setSelectedSize] = useState<BottleSize>('30ml');
+  const defaultSize: SizeOption = product.availableSizes.includes('30ml')
+    ? '30ml'
+    : product.availableSizes[0] ?? '10ml';
+
+  const [selectedSize, setSelectedSize] = useState<SizeOption>(defaultSize);
   const [justAdded, setJustAdded] = useState(false);
 
-  const activePrice = product.prices[selectedSize];
+  useEffect(() => {
+    if (!product.availableSizes.includes(selectedSize)) {
+      setSelectedSize(product.availableSizes[0] ?? '10ml');
+    }
+  }, [product.availableSizes, selectedSize]);
+
+  const activePrice = product.prices[selectedSize] ?? 0;
 
   const handleAdd = () => {
+    if (!product.inStock) return;
     onAddToCart(product, selectedSize);
     setJustAdded(true);
     window.setTimeout(() => setJustAdded(false), 1100);
@@ -41,33 +52,44 @@ export function ProductCard({
         >
           <ResilientImage
             src={product.image}
+            fallbackSrc={product.fallbackImage}
             alt={`${product.name} — ${product.subtitle}`}
             title={product.name}
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+            className={`w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04] ${
+              !product.inStock ? 'opacity-65 grayscale-[30%]' : ''
+            }`}
             containerClassName="w-full h-full"
           />
         </button>
 
-        {/* Subtle Editorial Tag (single clean text marker, zero pill spam) */}
-        <span className="pointer-events-none absolute top-3 left-3 bg-[#121212]/88 px-2.5 py-1 text-[11px] font-medium tracking-[0.14em] uppercase text-[#C5A059]">
-          {product.badge}
-        </span>
+        {/* Single Editorial Tag */}
+        {(!product.inStock || product.badge !== 'None') && (
+          <span className="pointer-events-none absolute top-3 left-3 bg-[#121212]/90 px-2.5 py-1 text-[11px] font-medium tracking-[0.14em] uppercase text-[#C5A059]">
+            {!product.inStock ? 'Out of Stock' : product.badge}
+          </span>
+        )}
 
         {/* Wishlist Toggle */}
         <button
           type="button"
           onClick={() => onToggleWishlist(product.id)}
-          aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Save ${product.name} to wishlist`}
+          aria-label={
+            isWishlisted
+              ? `Remove ${product.name} from wishlist`
+              : `Save ${product.name} to wishlist`
+          }
           aria-pressed={isWishlisted}
           className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center bg-[#FAF9F6]/92 text-[#1A1A1A] border border-[#1A1A1A]/10 transition-colors hover:border-[#C5A059] hover:text-[#8C6D3B] focus-visible:outline-2 focus-visible:outline-[#C5A059]"
         >
           <Heart
-            className={`h-4 w-4 transition-colors ${isWishlisted ? 'fill-[#C5A059] text-[#C5A059]' : ''}`}
+            className={`h-4 w-4 transition-colors ${
+              isWishlisted ? 'fill-[#C5A059] text-[#C5A059]' : ''
+            }`}
             strokeWidth={1.6}
           />
         </button>
 
-        {/* Hover Action Bar (Desktop reveal + always reachable via keyboard focus) */}
+        {/* Hover Action Bar */}
         <div className="absolute inset-x-0 bottom-0 flex items-center gap-px bg-[#121212]/90 backdrop-blur-xs opacity-0 translate-y-2 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0">
           <button
             type="button"
@@ -80,11 +102,12 @@ export function ProductCard({
           <span className="h-4 w-px bg-white/15" aria-hidden="true" />
           <button
             type="button"
+            disabled={!product.inStock}
             onClick={handleAdd}
-            className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium tracking-wider uppercase text-[#C5A059] hover:bg-[#C5A059] hover:text-[#121212] transition-colors whitespace-nowrap"
+            className="flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium tracking-wider uppercase text-[#C5A059] hover:bg-[#C5A059] hover:text-[#121212] disabled:opacity-50 disabled:pointer-events-none transition-colors whitespace-nowrap"
           >
             <ShoppingBag className="h-3.5 w-3.5" strokeWidth={1.7} />
-            {justAdded ? 'Added' : 'Add to Cart'}
+            {!product.inStock ? 'Sold Out' : justAdded ? 'Added' : 'Add to Cart'}
           </button>
         </div>
       </div>
@@ -92,13 +115,11 @@ export function ProductCard({
       {/* Product Details */}
       <div className="flex flex-1 flex-col justify-between p-5">
         <div>
-          {/* Category & Concentration Kicker */}
           <div className="flex items-center justify-between gap-2 text-[11px] uppercase tracking-[0.14em] text-[#666666]">
             <span>{product.category}</span>
             <span className="text-[#8C6D3B]">{product.longevity.label}</span>
           </div>
 
-          {/* Product Name */}
           <h3 className="mt-1.5 font-serif text-xl font-semibold tracking-tight text-[#1A1A1A] leading-snug">
             <button
               type="button"
@@ -109,9 +130,8 @@ export function ProductCard({
             </button>
           </h3>
 
-          {/* Unboxed Scent Notes Line */}
           <p className="mt-1 text-xs text-[#666666] leading-relaxed">
-            {product.notesLine}
+            {product.scentNotes.summary}
           </p>
         </div>
 
@@ -126,22 +146,25 @@ export function ProductCard({
             </span>
           </div>
 
-          {/* Size Segmented Buttons */}
           <div
             className="grid grid-cols-4 gap-1.5"
             role="group"
             aria-label={`Select bottle size for ${product.name}`}
           >
             {BOTTLE_SIZES.map((size) => {
-              const active = selectedSize === size;
+              const isAvailable = product.availableSizes.includes(size);
+              const active = selectedSize === size && isAvailable;
               return (
                 <button
                   key={size}
                   type="button"
+                  disabled={!isAvailable}
                   onClick={() => setSelectedSize(size)}
                   aria-pressed={active}
                   className={`py-2 text-xs font-medium tabular-nums transition-colors whitespace-nowrap border focus-visible:outline-2 focus-visible:outline-[#C5A059] ${
-                    active
+                    !isAvailable
+                      ? 'bg-[#EFECE6]/50 text-[#666666]/45 border-[#1A1A1A]/8 line-through cursor-not-allowed'
+                      : active
                       ? 'bg-[#121212] text-[#C5A059] border-[#121212]'
                       : 'bg-transparent text-[#1A1A1A]/80 border-[#1A1A1A]/15 hover:border-[#8C6D3B] hover:text-[#1A1A1A]'
                   }`}
@@ -152,18 +175,24 @@ export function ProductCard({
             })}
           </div>
 
-          {/* Reliable Mobile + Desktop Primary Card CTA */}
           <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
+              disabled={!product.inStock}
               onClick={handleAdd}
               className={`flex-1 py-2.5 px-4 text-xs font-semibold uppercase tracking-[0.14em] transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-[#C5A059] ${
-                justAdded
+                !product.inStock
+                  ? 'bg-[#EFECE6] text-[#666666] border border-[#1A1A1A]/15 cursor-not-allowed'
+                  : justAdded
                   ? 'bg-[#8C6D3B] text-[#FAF9F6]'
                   : 'bg-[#121212] text-[#FAF9F6] hover:bg-[#C5A059] hover:text-[#121212]'
               }`}
             >
-              {justAdded ? 'Added to Bag' : `Add ${selectedSize} · ৳${activePrice.toLocaleString('en-US')}`}
+              {!product.inStock
+                ? 'Out of Stock'
+                : justAdded
+                ? 'Added to Bag'
+                : `Add ${selectedSize} · ৳${activePrice.toLocaleString('en-US')}`}
             </button>
             <button
               type="button"

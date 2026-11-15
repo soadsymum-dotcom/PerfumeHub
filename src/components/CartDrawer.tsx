@@ -1,15 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { CheckCircle2, MessageCircle, Minus, Plus, ShoppingBag, Trash2, X } from 'lucide-react';
-import type { BottleSize, PerfumeProduct } from '../data/perfumes';
+import type { CartItem } from '../data/perfumes';
 import { ResilientImage } from './ResilientImage';
-
-export interface CartItem {
-  key: string;
-  product: PerfumeProduct;
-  size: BottleSize;
-  unitPrice: number;
-  quantity: number;
-}
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -57,7 +49,8 @@ export function CartDrawer({
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
   const freeDeliveryUnlocked = subtotal >= FREE_DELIVERY_THRESHOLD;
-  const deliveryFee = items.length === 0 ? 0 : freeDeliveryUnlocked ? 0 : zone === 'inside-dhaka' ? 60 : 120;
+  const deliveryFee =
+    items.length === 0 ? 0 : freeDeliveryUnlocked ? 0 : zone === 'inside-dhaka' ? 60 : 120;
   const total = subtotal + deliveryFee;
   const progressPct = Math.min(100, Math.round((subtotal / FREE_DELIVERY_THRESHOLD) * 100));
   const remainingForFree = Math.max(0, FREE_DELIVERY_THRESHOLD - subtotal);
@@ -114,7 +107,6 @@ export function CartDrawer({
         className="relative flex h-full w-full max-w-md flex-col bg-[#FAF9F6] text-[#1A1A1A] shadow-2xl border-l border-[#1A1A1A]/10"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#1A1A1A]/10 bg-[#121212] text-[#FAF9F6]">
           <div className="flex items-center gap-2.5">
             <ShoppingBag className="h-4 w-4 text-[#C5A059]" strokeWidth={1.7} />
@@ -132,7 +124,6 @@ export function CartDrawer({
           </button>
         </div>
 
-        {/* Free Delivery Progress Bar */}
         {!confirmedOrder && (
           <div className="px-6 py-3.5 bg-[#EFECE6] border-b border-[#1A1A1A]/10">
             <p className="text-xs text-[#1A1A1A] mb-2">
@@ -155,7 +146,6 @@ export function CartDrawer({
           </div>
         )}
 
-        {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {confirmedOrder ? (
             <div className="py-8 text-center">
@@ -300,6 +290,7 @@ export function CartDrawer({
                   <div className="h-20 w-20 shrink-0 bg-[#EFECE6] overflow-hidden border border-[#1A1A1A]/10">
                     <ResilientImage
                       src={item.product.image}
+                      fallbackSrc={item.product.fallbackImage}
                       alt={item.product.name}
                       title={item.product.name}
                       className="h-full w-full object-cover"
@@ -361,10 +352,8 @@ export function CartDrawer({
           )}
         </div>
 
-        {/* Footer Totals & Actions */}
         {items.length > 0 && !confirmedOrder && (
           <div className="border-t border-[#1A1A1A]/10 bg-[#FAF9F6] px-6 py-5 space-y-4">
-            {/* Delivery Zone Selector */}
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
@@ -399,7 +388,9 @@ export function CartDrawer({
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-[#666666]">
                 <span>Subtotal</span>
-                <span className="tabular-nums text-[#1A1A1A]">৳{subtotal.toLocaleString('en-US')}</span>
+                <span className="tabular-nums text-[#1A1A1A]">
+                  ৳{subtotal.toLocaleString('en-US')}
+                </span>
               </div>
               <div className="flex justify-between text-[#666666]">
                 <span>Delivery</span>

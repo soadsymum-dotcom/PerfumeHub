@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Heart, Minus, Plus, ShoppingBag, X } from 'lucide-react';
-import { BOTTLE_SIZES, type BottleSize, type PerfumeProduct } from '../data/perfumes';
+import { BOTTLE_SIZES, type Product, type SizeOption } from '../data/perfumes';
 import { ResilientImage } from './ResilientImage';
 
 interface QuickViewModalProps {
-  product: PerfumeProduct | null;
-  initialSize: BottleSize;
+  product: Product | null;
+  initialSize: SizeOption;
   isWishlisted: boolean;
   onClose: () => void;
   onToggleWishlist: (id: string) => void;
-  onAddToCart: (product: PerfumeProduct, size: BottleSize, quantity: number) => void;
+  onAddToCart: (product: Product, size: SizeOption, quantity: number) => void;
 }
 
 export function QuickViewModal({
@@ -20,11 +20,15 @@ export function QuickViewModal({
   onToggleWishlist,
   onAddToCart,
 }: QuickViewModalProps) {
-  const [selectedSize, setSelectedSize] = useState<BottleSize>(initialSize);
+  const [selectedSize, setSelectedSize] = useState<SizeOption>(initialSize);
   const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
-    setSelectedSize(initialSize);
+    if (!product) return;
+    const validSize = product.availableSizes.includes(initialSize)
+      ? initialSize
+      : product.availableSizes[0] ?? '10ml';
+    setSelectedSize(validSize);
     setQuantity(1);
   }, [product, initialSize]);
 
@@ -39,9 +43,10 @@ export function QuickViewModal({
 
   if (!product) return null;
 
-  const activePrice = product.prices[selectedSize];
+  const activePrice = product.prices[selectedSize] ?? 0;
 
   const handleAdd = () => {
+    if (!product.inStock) return;
     onAddToCart(product, selectedSize, quantity);
     onClose();
   };
@@ -68,10 +73,10 @@ export function QuickViewModal({
         </button>
 
         <div className="grid grid-cols-1 md:grid-cols-12 items-stretch">
-          {/* Left Product Visual */}
           <div className="md:col-span-5 bg-[#EFECE6] relative min-h-[280px]">
             <ResilientImage
               src={product.image}
+              fallbackSrc={product.fallbackImage}
               alt={product.name}
               title={product.name}
               className="w-full h-full object-cover"
@@ -82,13 +87,18 @@ export function QuickViewModal({
             </span>
           </div>
 
-          {/* Right Fragrance Specification & Purchase Module */}
           <div className="md:col-span-7 p-6 sm:p-8 flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-[#8C6D3B]">
                 <span>{product.collection}</span>
                 <span aria-hidden="true">·</span>
                 <span>{product.category}</span>
+                {!product.inStock && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="text-[#1A1A1A] font-semibold">Out of Stock</span>
+                  </>
+                )}
               </div>
 
               <h2
@@ -110,7 +120,7 @@ export function QuickViewModal({
                       Top Notes
                     </span>
                     <span className="mt-1 block text-[#1A1A1A] leading-relaxed">
-                      {product.notes.top.join(' · ')}
+                      {product.scentNotes.top.join(' · ')}
                     </span>
                   </div>
                   <div className="bg-[#EFECE6]/70 p-3 border border-[#1A1A1A]/8">
@@ -118,7 +128,7 @@ export function QuickViewModal({
                       Heart Notes
                     </span>
                     <span className="mt-1 block text-[#1A1A1A] leading-relaxed">
-                      {product.notes.middle.join(' · ')}
+                      {product.scentNotes.middle.join(' · ')}
                     </span>
                   </div>
                   <div className="bg-[#EFECE6]/70 p-3 border border-[#1A1A1A]/8">
@@ -126,7 +136,7 @@ export function QuickViewModal({
                       Base Notes
                     </span>
                     <span className="mt-1 block text-[#1A1A1A] leading-relaxed">
-                      {product.notes.base.join(' · ')}
+                      {product.scentNotes.base.join(' · ')}
                     </span>
                   </div>
                 </div>
@@ -161,7 +171,8 @@ export function QuickViewModal({
               </div>
 
               <p className="mt-3 text-xs text-[#666666]">
-                Recommended climate wear: <span className="text-[#1A1A1A] font-medium">{product.weatherFit}</span>
+                Recommended climate wear:{' '}
+                <span className="text-[#1A1A1A] font-medium">{product.weatherFit}</span>
               </p>
             </div>
 
@@ -178,14 +189,18 @@ export function QuickViewModal({
 
               <div className="grid grid-cols-4 gap-2 mb-4">
                 {BOTTLE_SIZES.map((size) => {
-                  const active = selectedSize === size;
+                  const isAvailable = product.availableSizes.includes(size);
+                  const active = selectedSize === size && isAvailable;
                   return (
                     <button
                       key={size}
                       type="button"
+                      disabled={!isAvailable}
                       onClick={() => setSelectedSize(size)}
                       className={`py-2.5 text-xs font-medium tabular-nums border transition-colors ${
-                        active
+                        !isAvailable
+                          ? 'bg-[#EFECE6]/50 text-[#666666]/45 border-[#1A1A1A]/8 line-through cursor-not-allowed'
+                          : active
                           ? 'bg-[#121212] text-[#C5A059] border-[#121212]'
                           : 'bg-transparent text-[#1A1A1A] border-[#1A1A1A]/15 hover:border-[#8C6D3B]'
                       }`}
@@ -197,7 +212,6 @@ export function QuickViewModal({
               </div>
 
               <div className="flex flex-wrap sm:flex-nowrap items-center gap-3">
-                {/* Quantity Stepper */}
                 <div className="flex items-center border border-[#1A1A1A]/20 h-11">
                   <button
                     type="button"
@@ -220,11 +234,12 @@ export function QuickViewModal({
 
                 <button
                   type="button"
+                  disabled={!product.inStock}
                   onClick={handleAdd}
-                  className="flex-1 h-11 flex items-center justify-center gap-2 bg-[#121212] text-[#FAF9F6] hover:bg-[#C5A059] hover:text-[#121212] text-xs font-semibold uppercase tracking-[0.16em] transition-colors whitespace-nowrap px-5"
+                  className="flex-1 h-11 flex items-center justify-center gap-2 bg-[#121212] text-[#FAF9F6] hover:bg-[#C5A059] hover:text-[#121212] disabled:bg-[#EFECE6] disabled:text-[#666666] disabled:cursor-not-allowed text-xs font-semibold uppercase tracking-[0.16em] transition-colors whitespace-nowrap px-5"
                 >
                   <ShoppingBag className="h-4 w-4" strokeWidth={1.7} />
-                  Add to Cart
+                  {product.inStock ? 'Add to Cart' : 'Out of Stock'}
                 </button>
 
                 <button
@@ -234,7 +249,9 @@ export function QuickViewModal({
                   className="h-11 w-11 flex items-center justify-center border border-[#1A1A1A]/20 hover:border-[#C5A059] transition-colors"
                 >
                   <Heart
-                    className={`h-4 w-4 ${isWishlisted ? 'fill-[#C5A059] text-[#C5A059]' : 'text-[#1A1A1A]'}`}
+                    className={`h-4 w-4 ${
+                      isWishlisted ? 'fill-[#C5A059] text-[#C5A059]' : 'text-[#1A1A1A]'
+                    }`}
                     strokeWidth={1.7}
                   />
                 </button>
