@@ -1,0 +1,8 @@
+{
+  "name": "Perfume Hub BD",
+  "description": "Luxury niche fragrance, designer decants, and Middle Eastern perfume atelier in Bangladesh with nationwide Cash on Delivery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
