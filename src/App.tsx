@@ -22,19 +22,34 @@ import {
   type CartItem,
   type CategoryShowcaseItem,
   type CollectionType,
+  type DeliveryArea,
   type FilterCategory,
+  type OrderRecord,
+  type OrderStatus,
+  type PaymentMethod,
+  type PhoneAlertConfig,
   type Product,
   type SizeOption,
 } from './data/perfumes';
+import { dispatchPhoneNotification } from './utils/notifications';
 import { ResilientImage } from './components/ResilientImage';
 import { ProductCard } from './components/ProductCard';
 import { QuickViewModal } from './components/QuickViewModal';
 import { CartDrawer } from './components/CartDrawer';
+import { CheckoutModal } from './components/CheckoutModal';
 import { ScentFinderModal } from './components/ScentFinderModal';
 import { PolicyModal, type PolicyType } from './components/PolicyModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 
+// Hardcoded production notification defaults (override via Admin -> Phone Alert Setup)
+const DEFAULT_TG_BOT_TOKEN = '';
+const DEFAULT_TG_CHAT_ID = '';
+const DEFAULT_NTFY_TOPIC = 'perfumehub-soad-orders';
+
 const STORAGE_KEY = 'perfume_hub_bd_catalog_v1';
+const ORDERS_STORAGE_KEY = 'perfume_hub_bd_orders_v1';
+const ALERT_CONFIG_STORAGE_KEY = 'perfume_hub_bd_alert_config_v1';
+const FREE_DELIVERY_THRESHOLD = 2500;
 const FILTER_TABS: FilterCategory[] = ['All', 'Men', 'Women', 'Unisex', 'Arabian'];
 
 const FALLBACK_HERO_URL =
@@ -304,8 +319,43 @@ function loadStoredProducts(): Product[] {
   }
 }
 
+function loadStoredOrders(): OrderRecord[] {
+  try {
+    const raw = window.localStorage.getItem(ORDERS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as OrderRecord[];
+  } catch {
+    return [];
+  }
+}
+
+function loadStoredAlertConfig(): PhoneAlertConfig {
+  const defaults: PhoneAlertConfig = {
+    tgBotToken: DEFAULT_TG_BOT_TOKEN,
+    tgChatId: DEFAULT_TG_CHAT_ID,
+    ntfyTopic: DEFAULT_NTFY_TOPIC,
+  };
+  try {
+    const raw = window.localStorage.getItem(ALERT_CONFIG_STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<PhoneAlertConfig>;
+    return {
+      tgBotToken: typeof parsed.tgBotToken === 'string' ? parsed.tgBotToken : defaults.tgBotToken,
+      tgChatId: typeof parsed.tgChatId === 'string' ? parsed.tgChatId : defaults.tgChatId,
+      ntfyTopic: typeof parsed.ntfyTopic === 'string' ? parsed.ntfyTopic : defaults.ntfyTopic,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
 export default function App() {
   const [products, setProducts] = useState<Product[]>(loadStoredProducts);
+  const [orders, setOrders] = useState<OrderRecord[]>(loadStoredOrders);
+  const [alertConfig, setAlertConfig] = useState<PhoneAlertConfig>(loadStoredAlertConfig);
+
   const [bannerVisible, setBannerVisible] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -317,7 +367,9 @@ export default function App() {
   const [wishlist, setWishlist] = useState<string[]>(['nuit-de-lambre-oud', 'oud-al-sultan']);
 
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [deliveryArea, setDeliveryArea] = useState<DeliveryArea>('inside-dhaka');
   const [cartOpen, setCartOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   const [quickViewState, setQuickViewState] = useState<{
     product: Product | null;
@@ -332,13 +384,34 @@ export default function App() {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(products));
     } catch {
-      // Ignore quota errors if storage is full
+      // Ignore quota errors
     }
   }, [products]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    } catch {
+      // Ignore quota errors
+    }
+  }, [orders]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ALERT_CONFIG_STORAGE_KEY, JSON.stringify(alertConfig));
+    } catch {
+      // Ignore quota errors
+    }
+  }, [alertConfig]);
 
   const totalCartCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
     [cart]
+  );
+
+  const unreadOrdersCount = useMemo(
+    () => orders.filter((o) => !o.isRead).length,
+    [orders]
   );
 
   const filteredProducts = useMemo(() => {
@@ -415,6 +488,52 @@ export default function App() {
     setCart((prev) => prev.filter((item) => item.key !== key));
   };
 
+  const handleConfirmCustomerOrder = async (payload: {
+    customerName: string;
+    phone: string;
+    deliveryArea: DeliveryArea;
+    address: string;
+    paymentMethod: PaymentMethod;
+  }): Promise<OrderRecord> => {
+    const subtotal = cart.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    const freeDelivery = subtotal >= FREE_DELIVERY_THRESHOLD;
+    const deliveryFee =
+      freeDelivery ? 0 : payload.deliveryArea === 'inside-dhaka' ? 70 : 130;
+    const total = subtotal + deliveryFee;
+    const orderNumber = `#PHB-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const newOrder: OrderRecord = {
+      id: `order-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      orderNumber,
+      createdAt: new Date().toISOString(),
+      customerName: payload.customerName,
+      phone: payload.phone,
+      deliveryArea: payload.deliveryArea,
+      deliveryFee,
+      address: payload.address,
+      paymentMethod: payload.paymentMethod,
+      items: cart.map((item) => ({
+        productId: item.product.id,
+        name: item.product.name,
+        size: item.size,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      subtotal,
+      total,
+      status: 'Pending',
+      isRead: false,
+    };
+
+    setOrders((prev) => [newOrder, ...prev]);
+    setCart([]);
+
+    // Trigger instant push notification in background without blocking confirmation UI
+    void dispatchPhoneNotification(newOrder, alertConfig);
+
+    return newOrder;
+  };
+
   const handleSaveProduct = (savedProduct: Product) => {
     setProducts((prev) => {
       const exists = prev.some((p) => p.id === savedProduct.id);
@@ -439,6 +558,22 @@ export default function App() {
   const handleResetCatalog = () => {
     setProducts(DEFAULT_PRODUCTS);
     window.localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === orderId ? { ...order, status, isRead: true } : order
+      )
+    );
+  };
+
+  const handleDeleteOrder = (orderId: string) => {
+    setOrders((prev) => prev.filter((order) => order.id !== orderId));
+  };
+
+  const handleMarkAllOrdersRead = () => {
+    setOrders((prev) => prev.map((order) => ({ ...order, isRead: true })));
   };
 
   const resetAllFilters = () => {
@@ -476,7 +611,6 @@ export default function App() {
         {/* Sticky Navigation Header */}
         <header className="bg-[#121212]/96 backdrop-blur-md text-[#FAF9F6] border-b border-white/10">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4 lg:gap-8">
-            {/* Left: Menu Links / Mobile Button */}
             <div className="flex items-center lg:flex-1">
               <button
                 type="button"
@@ -530,7 +664,6 @@ export default function App() {
               </nav>
             </div>
 
-            {/* Center: Brand Logo */}
             <a
               href="#top"
               onClick={(e) => {
@@ -542,7 +675,6 @@ export default function App() {
               PERFUME HUB <span className="text-[#C5A059]">BD</span>
             </a>
 
-            {/* Right: Search, Wishlist, Cart */}
             <div className="flex items-center justify-end gap-2 sm:gap-3 lg:flex-1 shrink-0">
               <button
                 type="button"
@@ -1121,6 +1253,11 @@ export default function App() {
               >
                 <Lock className="h-3.5 w-3.5" />
                 <span>Admin</span>
+                {unreadOrdersCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold tabular-nums">
+                    {unreadOrdersCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
@@ -1142,10 +1279,23 @@ export default function App() {
       <CartDrawer
         isOpen={cartOpen}
         items={cart}
+        deliveryArea={deliveryArea}
+        onChangeDeliveryArea={setDeliveryArea}
         onClose={() => setCartOpen(false)}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}
-        onClearCart={() => setCart([])}
+        onProceedToCheckout={() => {
+          setCartOpen(false);
+          setCheckoutOpen(true);
+        }}
+      />
+
+      <CheckoutModal
+        isOpen={checkoutOpen}
+        items={cart}
+        initialDeliveryArea={deliveryArea}
+        onClose={() => setCheckoutOpen(false)}
+        onConfirmOrder={handleConfirmCustomerOrder}
       />
 
       <ScentFinderModal
@@ -1161,6 +1311,8 @@ export default function App() {
       <AdminPanelModal
         isOpen={adminOpen}
         products={products}
+        orders={orders}
+        alertConfig={alertConfig}
         defaultImageFallback={nocturneOudImg}
         onClose={() => setAdminOpen(false)}
         onSaveProduct={handleSaveProduct}
@@ -1168,6 +1320,10 @@ export default function App() {
         onToggleStock={handleToggleStock}
         onImportProducts={(imported) => setProducts(imported)}
         onResetCatalog={handleResetCatalog}
+        onUpdateOrderStatus={handleUpdateOrderStatus}
+        onDeleteOrder={handleDeleteOrder}
+        onMarkAllOrdersRead={handleMarkAllOrdersRead}
+        onSaveAlertConfig={setAlertConfig}
       />
     </div>
   );

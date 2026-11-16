@@ -56,13 +56,14 @@ export function PolicyModal({ policy, onClose }: PolicyModalProps) {
         {isDelivery ? (
           <div className="mt-4 space-y-3 text-sm text-[#666666] leading-relaxed">
             <p>
-              <strong className="text-[#1A1A1A]">Inside Dhaka Metro:</strong> ৳60 standard courier charge with 24–48 hour doorstep Cash on Delivery.
+              <strong className="text-[#1A1A1A]">Inside Dhaka Metro:</strong> ৳70 standard courier charge with 24–48 hour doorstep Cash on Delivery.
             </p>
             <p>
-              <strong className="text-[#1A1A1A]">Outside Dhaka (All 64 Districts):</strong> ৳120 nationwide courier via Steadfast &amp; Pathao within 48–72 hours.
+              <strong className="text-[#1A1A1A]">Outside Dhaka (All 64 Districts):</strong> ৳130 nationwide courier via Steadfast &amp; Pathao within 48–72 hours.
             </p>
             <p>
-              <strong className="text-[#1A1A1A]">Complimentary Shipping:</strong> Orders over <span className="tabular-nums font-medium text-[#1A1A1A]">৳2,500</span> qualify automatically for free nationwide delivery.
+              <strong className="text-[#1A1A1A]">Complimentary Shipping:</strong> Orders over{' '}
+              <span className="tabular-nums font-medium text-[#1A1A1A]">৳2,500</span> qualify automatically for free nationwide delivery.
             </p>
           </div>
         ) : (

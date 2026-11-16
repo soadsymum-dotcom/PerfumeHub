@@ -7,14 +7,21 @@ import {
   type FormEvent,
 } from 'react';
 import {
+  Bell,
   Check,
+  CheckCheck,
   Copy,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   ImagePlus,
   Lock,
+  Phone,
   Plus,
   RotateCcw,
+  Send,
+  Smartphone,
   Trash2,
   Unlock,
   Upload,
@@ -25,16 +32,25 @@ import {
   PRODUCT_BADGES,
   PRODUCT_CATEGORIES,
   type CollectionType,
+  type OrderRecord,
+  type OrderStatus,
+  type PhoneAlertConfig,
   type Product,
   type ProductBadge,
   type ProductCategory,
   type SizeOption,
 } from '../data/perfumes';
+import {
+  dispatchPhoneNotification,
+  playNotificationChime,
+} from '../utils/notifications';
 import { ResilientImage } from './ResilientImage';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
   products: Product[];
+  orders: OrderRecord[];
+  alertConfig: PhoneAlertConfig;
   defaultImageFallback: string;
   onClose: () => void;
   onSaveProduct: (product: Product) => void;
@@ -42,11 +58,16 @@ interface AdminPanelModalProps {
   onToggleStock: (id: string) => void;
   onImportProducts: (products: Product[]) => void;
   onResetCatalog: () => void;
+  onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  onDeleteOrder: (orderId: string) => void;
+  onMarkAllOrdersRead: () => void;
+  onSaveAlertConfig: (config: PhoneAlertConfig) => void;
 }
 
-const ADMIN_PIN = '1234';
+const ADMIN_PASSWORD = 'Soadhero6969';
 
-type AdminViewTab = 'table' | 'form' | 'sync';
+type AdminMainTab = 'perfumes' | 'orders' | 'phone';
+type PerfumeSubTab = 'table' | 'form' | 'sync';
 
 interface ProductFormState {
   id: string;
@@ -161,6 +182,8 @@ function compressImageToDataUrl(file: File, maxDimension = 760, quality = 0.78):
 export function AdminPanelModal({
   isOpen,
   products,
+  orders,
+  alertConfig,
   defaultImageFallback,
   onClose,
   onSaveProduct,
@@ -168,26 +191,53 @@ export function AdminPanelModal({
   onToggleStock,
   onImportProducts,
   onResetCatalog,
+  onUpdateOrderStatus,
+  onDeleteOrder,
+  onMarkAllOrdersRead,
+  onSaveAlertConfig,
 }: AdminPanelModalProps) {
   const [unlocked, setUnlocked] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinError, setPinError] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
-  const [activeTab, setActiveTab] = useState<AdminViewTab>('table');
+  const [mainTab, setMainTab] = useState<AdminMainTab>('perfumes');
+  const [perfumeSubTab, setPerfumeSubTab] = useState<PerfumeSubTab>('table');
   const [formState, setFormState] = useState<ProductFormState>(() =>
     createEmptyFormState(defaultImageFallback)
   );
   const [formError, setFormError] = useState('');
   const [uploadInfo, setUploadInfo] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteOrderId, setConfirmDeleteOrderId] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
   const [importText, setImportText] = useState('');
   const [syncMessage, setSyncMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-  const [copiedMode, setCopiedMode] = useState<'json' | 'ts' | null>(null);
+  const [copiedMode, setCopiedMode] = useState<'json' | 'ts' | 'config' | null>(null);
+
+  const [draftAlertConfig, setDraftAlertConfig] = useState<PhoneAlertConfig>(alertConfig);
+  const [alertStatusMsg, setAlertStatusMsg] = useState<{
+    type: 'ok' | 'err';
+    text: string;
+  } | null>(null);
+  const [sendingTest, setSendingTest] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const jsonFileInputRef = useRef<HTMLInputElement | null>(null);
+  const prevOrderCountRef = useRef(orders.length);
+
+  useEffect(() => {
+    setDraftAlertConfig(alertConfig);
+  }, [alertConfig]);
+
+  // Play subtle chime if Admin Panel is open & unlocked when a new order arrives
+  useEffect(() => {
+    if (isOpen && unlocked && orders.length > prevOrderCountRef.current) {
+      playNotificationChime();
+    }
+    prevOrderCountRef.current = orders.length;
+  }, [orders.length, isOpen, unlocked]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -198,6 +248,11 @@ export function AdminPanelModal({
     return () => window.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
+  const unreadOrdersCount = useMemo(
+    () => orders.filter((o) => !o.isRead).length,
+    [orders]
+  );
+
   const jsonExportString = useMemo(() => JSON.stringify(products, null, 2), [products]);
 
   const tsExportString = useMemo(
@@ -206,16 +261,28 @@ export function AdminPanelModal({
     [jsonExportString]
   );
 
+  const configCodeSnippet = useMemo(() => {
+    const safeToken = draftAlertConfig.tgBotToken.replace(/'/g, "\\'");
+    const safeChatId = draftAlertConfig.tgChatId.replace(/'/g, "\\'");
+    const safeTopic = draftAlertConfig.ntfyTopic.replace(/'/g, "\\'");
+    return [
+      `const DEFAULT_TG_BOT_TOKEN = '${safeToken}';`,
+      `const DEFAULT_TG_CHAT_ID = '${safeChatId}';`,
+      `const DEFAULT_NTFY_TOPIC = '${safeTopic}';`,
+    ].join('\n');
+  }, [draftAlertConfig]);
+
   if (!isOpen) return null;
 
-  const handlePinSubmit = (e: FormEvent) => {
+  const handlePasswordSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (pinInput.trim() === ADMIN_PIN) {
+    if (passwordInput === ADMIN_PASSWORD) {
       setUnlocked(true);
-      setPinError('');
-      setPinInput('');
+      setPasswordError('');
+      setPasswordInput('');
+      setShowPassword(false);
     } else {
-      setPinError('Incorrect PIN. Default studio PIN is 1234.');
+      setPasswordError('Invalid Admin Password. Please verify case-sensitive credentials.');
     }
   };
 
@@ -223,14 +290,16 @@ export function AdminPanelModal({
     setFormState(createEmptyFormState(defaultImageFallback));
     setFormError('');
     setUploadInfo('');
-    setActiveTab('form');
+    setMainTab('perfumes');
+    setPerfumeSubTab('form');
   };
 
   const startEditProduct = (product: Product) => {
     setFormState(productToFormState(product));
     setFormError('');
     setUploadInfo('');
-    setActiveTab('form');
+    setMainTab('perfumes');
+    setPerfumeSubTab('form');
   };
 
   const toggleSizeAvailability = (size: SizeOption) => {
@@ -333,19 +402,26 @@ export function AdminPanelModal({
     };
 
     onSaveProduct(product);
-    setActiveTab('table');
+    setPerfumeSubTab('table');
     setFormState(createEmptyFormState(defaultImageFallback));
     setUploadInfo('');
     setFormError('');
   };
 
-  const handleCopyText = async (text: string, mode: 'json' | 'ts') => {
+  const handleCopyText = async (text: string, mode: 'json' | 'ts' | 'config') => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedMode(mode);
       window.setTimeout(() => setCopiedMode(null), 1800);
     } catch {
-      setSyncMessage({ type: 'err', text: 'Clipboard blocked — use Download JSON instead.' });
+      if (mode === 'config') {
+        setAlertStatusMsg({
+          type: 'err',
+          text: 'Clipboard blocked — select and copy the config snippet below manually.',
+        });
+      } else {
+        setSyncMessage({ type: 'err', text: 'Clipboard blocked — use Download JSON instead.' });
+      }
     }
   };
 
@@ -398,6 +474,92 @@ export function AdminPanelModal({
     reader.readAsText(file);
   };
 
+  const handleSaveAlertSettings = (e: FormEvent) => {
+    e.preventDefault();
+    onSaveAlertConfig({
+      tgBotToken: draftAlertConfig.tgBotToken.trim(),
+      tgChatId: draftAlertConfig.tgChatId.trim(),
+      ntfyTopic: draftAlertConfig.ntfyTopic.trim(),
+    });
+    setAlertStatusMsg({
+      type: 'ok',
+      text: 'Phone alert settings saved to browser storage.',
+    });
+  };
+
+  const handleSendTestNotification = async () => {
+    const hasTelegram =
+      Boolean(draftAlertConfig.tgBotToken.trim()) && Boolean(draftAlertConfig.tgChatId.trim());
+    const hasNtfy = Boolean(draftAlertConfig.ntfyTopic.trim());
+
+    if (!hasTelegram && !hasNtfy) {
+      setAlertStatusMsg({
+        type: 'err',
+        text: 'Enter either Telegram Bot Token + Chat ID or an ntfy Topic Name first.',
+      });
+      return;
+    }
+
+    onSaveAlertConfig({
+      tgBotToken: draftAlertConfig.tgBotToken.trim(),
+      tgChatId: draftAlertConfig.tgChatId.trim(),
+      ntfyTopic: draftAlertConfig.ntfyTopic.trim(),
+    });
+
+    setSendingTest(true);
+    setAlertStatusMsg(null);
+
+    const sampleOrder: OrderRecord = {
+      id: `test-${Date.now()}`,
+      orderNumber: '#PHB-TEST',
+      createdAt: new Date().toISOString(),
+      customerName: 'Test Customer (Dhaka)',
+      phone: '01700000000',
+      deliveryArea: 'inside-dhaka',
+      deliveryFee: 70,
+      address: 'House 14, Road 11, Banani, Dhaka',
+      paymentMethod: 'Cash on Delivery',
+      items: [
+        {
+          productId: 'test',
+          name: "Nuit de L'Ambre Oud",
+          size: '30ml',
+          quantity: 1,
+          unitPrice: 1550,
+        },
+      ],
+      subtotal: 1550,
+      total: 1620,
+      status: 'Pending',
+      isRead: true,
+    };
+
+    const res = await dispatchPhoneNotification(sampleOrder, draftAlertConfig);
+    setSendingTest(false);
+    playNotificationChime();
+
+    const channels: string[] = [];
+    if (res.telegramSent) channels.push('Telegram');
+    if (res.ntfySent) channels.push('ntfy.sh');
+
+    if (channels.length > 0 && res.errors.length === 0) {
+      setAlertStatusMsg({
+        type: 'ok',
+        text: `Test notification delivered via ${channels.join(' & ')}! Check your phone.`,
+      });
+    } else if (channels.length > 0) {
+      setAlertStatusMsg({
+        type: 'ok',
+        text: `Delivered via ${channels.join(' & ')}. Partial warnings: ${res.errors.join(', ')}`,
+      });
+    } else {
+      setAlertStatusMsg({
+        type: 'err',
+        text: `Delivery failed: ${res.errors.join(' · ') || 'Verify token/chat ID or topic name.'}`,
+      });
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#121212]/80 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto"
@@ -424,8 +586,8 @@ export function AdminPanelModal({
               </span>
               <span className="block text-[11px] text-[#FAF9F6]/60">
                 {unlocked
-                  ? `${products.length} total fragrances · ${products.filter((p) => p.inStock).length} in stock`
-                  : 'Authorized Catalog Access'}
+                  ? `${products.length} perfumes · ${orders.length} total orders (${unreadOrdersCount} unread)`
+                  : 'Authorized Catalog & Order Console'}
               </span>
             </div>
           </div>
@@ -461,117 +623,194 @@ export function AdminPanelModal({
               <Lock className="h-5 w-5" strokeWidth={1.6} />
             </div>
             <h2 className="font-serif text-3xl font-semibold text-[#1A1A1A]">
-              Atelier Admin Verification
+              Admin Studio Login
             </h2>
             <p className="mt-1.5 text-sm text-[#666666] max-w-sm">
-              Enter your 4-digit studio PIN to manage products, update BDT pricing, upload bottle photography, and export Vercel catalog JSON.
+              Enter your Admin Password to manage fragrances, review incoming customer orders, and configure instant phone alerts.
             </p>
 
-            <form onSubmit={handlePinSubmit} className="mt-6 w-full max-w-xs space-y-3">
-              <input
-                type="password"
-                inputMode="numeric"
-                maxLength={8}
-                value={pinInput}
-                onChange={(e) => {
-                  setPinInput(e.target.value);
-                  setPinError('');
-                }}
-                placeholder="Enter PIN (default: 1234)"
-                autoFocus
-                className="w-full border border-[#1A1A1A]/20 bg-white px-4 py-3 text-center text-base tracking-[0.35em] tabular-nums focus:border-[#C5A059] focus:outline-none"
-              />
-              {pinError && <p className="text-xs text-red-700 font-medium">{pinError}</p>}
+            <form onSubmit={handlePasswordSubmit} className="mt-6 w-full max-w-xs space-y-3 text-left">
+              <div>
+                <label
+                  htmlFor="admin-password-input"
+                  className="block text-xs font-semibold uppercase tracking-wider text-[#1A1A1A] mb-1.5"
+                >
+                  Enter Admin Password
+                </label>
+                <div className="relative">
+                  <input
+                    id="admin-password-input"
+                    type={showPassword ? 'text' : 'password'}
+                    value={passwordInput}
+                    onChange={(e) => {
+                      setPasswordInput(e.target.value);
+                      setPasswordError('');
+                    }}
+                    placeholder="Enter Admin Password"
+                    autoFocus
+                    className="w-full border border-[#1A1A1A]/20 bg-white pl-3.5 pr-11 py-3 text-sm focus:border-[#C5A059] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-[#666666] hover:text-[#121212]"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {passwordError && (
+                <p className="text-xs text-red-700 font-medium">{passwordError}</p>
+              )}
+
               <button
                 type="submit"
                 className="w-full py-3 bg-[#121212] text-[#C5A059] text-xs font-semibold uppercase tracking-[0.18em] hover:bg-[#C5A059] hover:text-[#121212] transition-colors"
               >
                 Unlock Admin Studio
               </button>
-              <p className="text-[11px] text-[#666666]">Default demo PIN: 1234</p>
             </form>
           </div>
         ) : (
           <>
-            {/* Navigation Tabs */}
-            <div className="px-6 py-3 bg-[#EFECE6] border-b border-[#1A1A1A]/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center gap-1.5">
+            {/* Primary Admin Navigation Tab Bar */}
+            <div className="px-6 py-3 bg-[#191919] text-[#FAF9F6] border-b border-white/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('table')}
+                  onClick={() => setMainTab('perfumes')}
                   className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap ${
-                    activeTab === 'table'
-                      ? 'bg-[#121212] text-[#C5A059]'
-                      : 'text-[#1A1A1A]/75 hover:text-[#1A1A1A]'
+                    mainTab === 'perfumes'
+                      ? 'bg-[#C5A059] text-[#121212]'
+                      : 'bg-white/5 text-[#FAF9F6]/80 hover:bg-white/10'
                   }`}
                 >
-                  Catalog ({products.length})
+                  Manage Perfumes
                 </button>
+
                 <button
                   type="button"
-                  onClick={startNewProduct}
-                  className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
-                    activeTab === 'form'
-                      ? 'bg-[#121212] text-[#C5A059]'
-                      : 'text-[#1A1A1A]/75 hover:text-[#1A1A1A]'
+                  onClick={() => setMainTab('orders')}
+                  className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap inline-flex items-center gap-2 ${
+                    mainTab === 'orders'
+                      ? 'bg-[#C5A059] text-[#121212]'
+                      : 'bg-white/5 text-[#FAF9F6]/80 hover:bg-white/10'
                   }`}
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  {formState.id ? 'Edit Perfume' : 'Add Perfume'}
+                  <Bell className="h-3.5 w-3.5" />
+                  <span>Notifications &amp; Orders</span>
+                  {unreadOrdersCount > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold tabular-nums">
+                      {unreadOrdersCount}
+                    </span>
+                  )}
                 </button>
+
                 <button
                   type="button"
                   onClick={() => {
-                    setSyncMessage(null);
-                    setActiveTab('sync');
+                    setAlertStatusMsg(null);
+                    setMainTab('phone');
                   }}
-                  className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap ${
-                    activeTab === 'sync'
-                      ? 'bg-[#121212] text-[#C5A059]'
-                      : 'text-[#1A1A1A]/75 hover:text-[#1A1A1A]'
+                  className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+                    mainTab === 'phone'
+                      ? 'bg-[#C5A059] text-[#121212]'
+                      : 'bg-white/5 text-[#FAF9F6]/80 hover:bg-white/10'
                   }`}
                 >
-                  Export / Import JSON
+                  <Smartphone className="h-3.5 w-3.5" />
+                  <span>Phone Alert Setup</span>
                 </button>
               </div>
+            </div>
 
-              {/* Reset to Default Catalog */}
-              {confirmReset ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[#1A1A1A] font-medium">Restore defaults?</span>
+            {/* Sub-bar when Manage Perfumes is active */}
+            {mainTab === 'perfumes' && (
+              <div className="px-6 py-2.5 bg-[#EFECE6] border-b border-[#1A1A1A]/10 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setPerfumeSubTab('table')}
+                    className={`px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap ${
+                      perfumeSubTab === 'table'
+                        ? 'bg-[#121212] text-[#C5A059]'
+                        : 'text-[#1A1A1A]/75 hover:text-[#1A1A1A]'
+                    }`}
+                  >
+                    Catalog ({products.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startNewProduct}
+                    className={`px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap inline-flex items-center gap-1.5 ${
+                      perfumeSubTab === 'form'
+                        ? 'bg-[#121212] text-[#C5A059]'
+                        : 'text-[#1A1A1A]/75 hover:text-[#1A1A1A]'
+                    }`}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {formState.id ? 'Edit Perfume' : 'Add Perfume'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
-                      onResetCatalog();
-                      setConfirmReset(false);
+                      setSyncMessage(null);
+                      setPerfumeSubTab('sync');
                     }}
-                    className="px-3 py-1.5 bg-[#121212] text-[#C5A059] text-xs font-semibold uppercase tracking-wider"
+                    className={`px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors whitespace-nowrap ${
+                      perfumeSubTab === 'sync'
+                        ? 'bg-[#121212] text-[#C5A059]'
+                        : 'text-[#1A1A1A]/75 hover:text-[#1A1A1A]'
+                    }`}
                   >
-                    Confirm
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmReset(false)}
-                    className="px-2.5 py-1.5 border border-[#1A1A1A]/20 text-xs"
-                  >
-                    Cancel
+                    Export / Import JSON
                   </button>
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmReset(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[#666666] hover:text-[#121212] transition-colors whitespace-nowrap"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Reset to Default Catalog
-                </button>
-              )}
-            </div>
 
-            {/* Scrollable Workspace */}
+                {confirmReset ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#1A1A1A] font-medium">Restore defaults?</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onResetCatalog();
+                        setConfirmReset(false);
+                      }}
+                      className="px-3 py-1 bg-[#121212] text-[#C5A059] text-xs font-semibold uppercase tracking-wider"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmReset(false)}
+                      className="px-2.5 py-1 border border-[#1A1A1A]/20 text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmReset(true)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#666666] hover:text-[#121212] transition-colors whitespace-nowrap"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Reset to Default Catalog
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Main Scrollable Workspace */}
             <div className="flex-1 overflow-y-auto p-6">
-              {activeTab === 'table' && (
+              {/* TAB 1: MANAGE PERFUMES */}
+              {mainTab === 'perfumes' && perfumeSubTab === 'table' && (
                 <div className="overflow-x-auto border border-[#1A1A1A]/10 bg-white">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -690,7 +929,7 @@ export function AdminPanelModal({
                 </div>
               )}
 
-              {activeTab === 'form' && (
+              {mainTab === 'perfumes' && perfumeSubTab === 'form' && (
                 <form onSubmit={handleSaveForm} className="space-y-6">
                   {formError && (
                     <div className="p-3 bg-red-50 border border-red-300 text-xs text-red-800 font-medium">
@@ -699,7 +938,6 @@ export function AdminPanelModal({
                   )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* Left Column: Core Identity & Image */}
                     <div className="lg:col-span-5 space-y-4">
                       <div>
                         <label
@@ -794,7 +1032,6 @@ export function AdminPanelModal({
                         </div>
                       </div>
 
-                      {/* Dual Image Upload System */}
                       <div className="border border-[#1A1A1A]/15 bg-white p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-semibold uppercase tracking-wider text-[#1A1A1A]">
@@ -873,7 +1110,6 @@ export function AdminPanelModal({
                         </div>
                       </div>
 
-                      {/* Stock Toggle */}
                       <div className="flex items-center justify-between border border-[#1A1A1A]/15 bg-white px-4 py-3">
                         <span className="text-xs font-semibold uppercase tracking-wider text-[#1A1A1A]">
                           Inventory Status
@@ -894,9 +1130,7 @@ export function AdminPanelModal({
                       </div>
                     </div>
 
-                    {/* Right Column: Pricing, Scent Notes & Sliders */}
                     <div className="lg:col-span-7 space-y-5">
-                      {/* Multi-Size Pricing Matrix */}
                       <div className="border border-[#1A1A1A]/15 bg-white p-4">
                         <span className="block text-xs font-semibold uppercase tracking-wider text-[#1A1A1A] mb-3">
                           Available Bottle Sizes &amp; BDT Pricing (৳)
@@ -947,7 +1181,6 @@ export function AdminPanelModal({
                         </div>
                       </div>
 
-                      {/* Scent Notes */}
                       <div className="border border-[#1A1A1A]/15 bg-white p-4 space-y-3">
                         <span className="block text-xs font-semibold uppercase tracking-wider text-[#1A1A1A]">
                           Scent Notes &amp; Card Summary
@@ -1012,7 +1245,6 @@ export function AdminPanelModal({
                         </div>
                       </div>
 
-                      {/* Performance Sliders */}
                       <div className="border border-[#1A1A1A]/15 bg-white p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <div className="flex items-center justify-between text-xs mb-1.5">
@@ -1077,7 +1309,6 @@ export function AdminPanelModal({
                         </div>
                       </div>
 
-                      {/* Description */}
                       <div>
                         <label
                           htmlFor="admin-desc"
@@ -1100,7 +1331,7 @@ export function AdminPanelModal({
                       <div className="flex items-center justify-end gap-3 pt-2">
                         <button
                           type="button"
-                          onClick={() => setActiveTab('table')}
+                          onClick={() => setPerfumeSubTab('table')}
                           className="px-5 py-2.5 border border-[#1A1A1A]/20 text-xs font-semibold uppercase tracking-wider hover:border-[#121212]"
                         >
                           Cancel
@@ -1117,9 +1348,8 @@ export function AdminPanelModal({
                 </form>
               )}
 
-              {activeTab === 'sync' && (
+              {mainTab === 'perfumes' && perfumeSubTab === 'sync' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Export Panel */}
                   <div className="border border-[#1A1A1A]/15 bg-white p-5 space-y-4">
                     <div>
                       <span className="text-[11px] uppercase tracking-[0.16em] text-[#8C6D3B] font-semibold">
@@ -1129,7 +1359,7 @@ export function AdminPanelModal({
                         Export Products JSON / Code
                       </h3>
                       <p className="mt-1 text-xs text-[#666666] leading-relaxed">
-                        Changes made here persist immediately in your browser&apos;s localStorage. Export JSON or copy the TypeScript array to update your permanent Vercel repository default catalog.
+                        Changes made here persist immediately in localStorage. Export JSON or copy the TypeScript array to update your permanent Vercel repository default catalog.
                       </p>
                     </div>
 
@@ -1175,7 +1405,6 @@ export function AdminPanelModal({
                     </pre>
                   </div>
 
-                  {/* Import Panel */}
                   <div className="border border-[#1A1A1A]/15 bg-white p-5 space-y-4">
                     <div>
                       <span className="text-[11px] uppercase tracking-[0.16em] text-[#8C6D3B] font-semibold">
@@ -1234,6 +1463,370 @@ export function AdminPanelModal({
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* TAB 2: NOTIFICATIONS & ORDERS */}
+              {mainTab === 'orders' && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#1A1A1A]/10">
+                    <div>
+                      <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A]">
+                        Incoming Orders &amp; Alerts
+                      </h3>
+                      <p className="text-xs text-[#666666]">
+                        Live customer orders placed via Checkout, ordered newest first.
+                      </p>
+                    </div>
+
+                    {orders.length > 0 && unreadOrdersCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={onMarkAllOrdersRead}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#121212] text-[#C5A059] text-xs font-semibold uppercase tracking-wider hover:bg-[#C5A059] hover:text-[#121212] transition-colors"
+                      >
+                        <CheckCheck className="h-3.5 w-3.5" />
+                        Mark All as Read
+                      </button>
+                    )}
+                  </div>
+
+                  {orders.length === 0 ? (
+                    <div className="border border-[#1A1A1A]/10 bg-white p-12 text-center">
+                      <Bell className="h-9 w-9 text-[#8C6D3B]/60 mx-auto mb-3" strokeWidth={1.3} />
+                      <h4 className="font-serif text-2xl font-medium text-[#1A1A1A]">
+                        No customer orders yet
+                      </h4>
+                      <p className="mt-1 text-sm text-[#666666]">
+                        When a customer confirms an order in the Checkout Modal, it will appear here with instant alert details.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {orders.map((order) => {
+                        const formattedTime = new Date(order.createdAt).toLocaleString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        });
+                        const isConfirmingDelete = confirmDeleteOrderId === order.id;
+
+                        return (
+                          <div
+                            key={order.id}
+                            className={`border bg-white p-5 transition-colors ${
+                              !order.isRead
+                                ? 'border-[#C5A059] shadow-[0_6px_20px_-12px_rgba(197,160,89,0.45)]'
+                                : 'border-[#1A1A1A]/12'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-4 pb-3 border-b border-[#1A1A1A]/10">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                  <span className="font-serif text-xl font-semibold text-[#1A1A1A] tabular-nums">
+                                    {order.orderNumber}
+                                  </span>
+                                  {!order.isRead && (
+                                    <span className="bg-red-600 text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+                                      New
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-[#666666] tabular-nums">
+                                    {formattedTime}
+                                  </span>
+                                </div>
+
+                                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#1A1A1A]">
+                                  <span className="font-semibold">{order.customerName}</span>
+                                  <a
+                                    href={`tel:${order.phone}`}
+                                    className="inline-flex items-center gap-1 text-[#8C6D3B] hover:underline font-medium tabular-nums"
+                                  >
+                                    <Phone className="h-3 w-3" />
+                                    {order.phone}
+                                  </a>
+                                  <span className="text-[#666666]">
+                                    {order.paymentMethod}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                <span className="block text-lg font-semibold text-[#1A1A1A] tabular-nums">
+                                  ৳{order.total.toLocaleString('en-US')}
+                                </span>
+                                <span className="text-[11px] text-[#666666]">
+                                  {order.deliveryArea === 'inside-dhaka'
+                                    ? 'Inside Dhaka'
+                                    : 'Outside Dhaka'}{' '}
+                                  ({order.deliveryFee === 0 ? 'Free' : `৳${order.deliveryFee}`})
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="py-3 grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
+                              <div className="md:col-span-5">
+                                <span className="block text-[10px] uppercase tracking-[0.14em] text-[#8C6D3B] font-semibold mb-1">
+                                  Delivery Address
+                                </span>
+                                <p className="text-[#1A1A1A] leading-relaxed">{order.address}</p>
+                              </div>
+
+                              <div className="md:col-span-7">
+                                <span className="block text-[10px] uppercase tracking-[0.14em] text-[#8C6D3B] font-semibold mb-1">
+                                  Ordered Perfumes
+                                </span>
+                                <ul className="space-y-1">
+                                  {order.items.map((item) => (
+                                    <li
+                                      key={`${item.productId}-${item.size}`}
+                                      className="flex justify-between text-[#1A1A1A]"
+                                    >
+                                      <span>
+                                        {item.name} ({item.size}) × {item.quantity}
+                                      </span>
+                                      <span className="tabular-nums font-medium">
+                                        ৳{(item.unitPrice * item.quantity).toLocaleString('en-US')}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </div>
+
+                            {/* Status & Actions */}
+                            <div className="pt-3 border-t border-[#1A1A1A]/10 flex flex-wrap items-center justify-between gap-3">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] uppercase tracking-wider text-[#666666] mr-1">
+                                  Status:
+                                </span>
+                                {(['Pending', 'Confirmed', 'Delivered'] as OrderStatus[]).map(
+                                  (statusOption) => {
+                                    const active = order.status === statusOption;
+                                    return (
+                                      <button
+                                        key={statusOption}
+                                        type="button"
+                                        onClick={() => onUpdateOrderStatus(order.id, statusOption)}
+                                        className={`px-3 py-1 text-xs font-medium border transition-colors ${
+                                          active
+                                            ? 'bg-[#121212] text-[#C5A059] border-[#121212]'
+                                            : 'bg-[#FAF9F6] text-[#1A1A1A]/75 border-[#1A1A1A]/15 hover:border-[#8C6D3B]'
+                                        }`}
+                                      >
+                                        {statusOption}
+                                      </button>
+                                    );
+                                  }
+                                )}
+                              </div>
+
+                              {isConfirmingDelete ? (
+                                <div className="inline-flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onDeleteOrder(order.id);
+                                      setConfirmDeleteOrderId(null);
+                                    }}
+                                    className="px-3 py-1 bg-red-700 text-white text-xs font-medium"
+                                  >
+                                    Confirm Delete
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteOrderId(null)}
+                                    className="px-2.5 py-1 border border-[#1A1A1A]/20 text-xs"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteOrderId(order.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 border border-[#1A1A1A]/15 text-xs text-[#666666] hover:border-red-700 hover:text-red-700 transition-colors"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: PHONE ALERT SETUP */}
+              {mainTab === 'phone' && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A]">
+                      Instant Phone Push Notifications
+                    </h3>
+                    <p className="mt-1 text-xs text-[#666666] max-w-2xl leading-relaxed">
+                      Receive instant mobile push alerts on iPhone or Android whenever a customer places an order on your live Vercel storefront. Use Telegram, ntfy.sh, or both simultaneously.
+                    </p>
+                  </div>
+
+                  {alertStatusMsg && (
+                    <div
+                      className={`p-3.5 text-xs font-medium border ${
+                        alertStatusMsg.type === 'ok'
+                          ? 'bg-[#EFECE6] border-[#C5A059] text-[#1A1A1A]'
+                          : 'bg-red-50 border-red-300 text-red-800'
+                      }`}
+                    >
+                      {alertStatusMsg.text}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSaveAlertSettings} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Telegram Integration */}
+                    <div className="border border-[#1A1A1A]/15 bg-white p-5 space-y-4">
+                      <div>
+                        <span className="text-[11px] uppercase tracking-[0.16em] text-[#8C6D3B] font-semibold">
+                          Option 1 · Telegram Bot API
+                        </span>
+                        <h4 className="mt-1 font-serif text-xl font-semibold">
+                          Telegram Instant Alert
+                        </h4>
+                        <p className="mt-1 text-xs text-[#666666] leading-relaxed">
+                          Create a bot with <strong>@BotFather</strong> for your Bot Token, message your bot once, and get your Chat ID from <strong>@userinfobot</strong>.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="tg-token"
+                          className="block text-xs font-semibold uppercase tracking-wider text-[#1A1A1A] mb-1.5"
+                        >
+                          Telegram Bot Token
+                        </label>
+                        <input
+                          id="tg-token"
+                          type="text"
+                          value={draftAlertConfig.tgBotToken}
+                          onChange={(e) =>
+                            setDraftAlertConfig((p) => ({ ...p, tgBotToken: e.target.value }))
+                          }
+                          placeholder="e.g., 7123456789:AAH..."
+                          className="w-full border border-[#1A1A1A]/20 px-3.5 py-2.5 text-xs font-mono focus:border-[#C5A059] focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="tg-chat-id"
+                          className="block text-xs font-semibold uppercase tracking-wider text-[#1A1A1A] mb-1.5"
+                        >
+                          Telegram Chat ID
+                        </label>
+                        <input
+                          id="tg-chat-id"
+                          type="text"
+                          value={draftAlertConfig.tgChatId}
+                          onChange={(e) =>
+                            setDraftAlertConfig((p) => ({ ...p, tgChatId: e.target.value }))
+                          }
+                          placeholder="e.g., 123456789"
+                          className="w-full border border-[#1A1A1A]/20 px-3.5 py-2.5 text-xs font-mono focus:border-[#C5A059] focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* ntfy.sh Integration */}
+                    <div className="border border-[#1A1A1A]/15 bg-white p-5 space-y-4">
+                      <div>
+                        <span className="text-[11px] uppercase tracking-[0.16em] text-[#8C6D3B] font-semibold">
+                          Option 2 · Zero-Setup Push
+                        </span>
+                        <h4 className="mt-1 font-serif text-xl font-semibold">
+                          ntfy.sh Webhook Alert
+                        </h4>
+                        <p className="mt-1 text-xs text-[#666666] leading-relaxed">
+                          Install the free <strong>ntfy</strong> app on iOS/Android and subscribe to your private topic name below. Every order fires a high-priority POST to{' '}
+                          <code className="text-[#1A1A1A]">https://ntfy.sh/&lt;topic&gt;</code>.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="ntfy-topic"
+                          className="block text-xs font-semibold uppercase tracking-wider text-[#1A1A1A] mb-1.5"
+                        >
+                          ntfy Topic Name
+                        </label>
+                        <input
+                          id="ntfy-topic"
+                          type="text"
+                          value={draftAlertConfig.ntfyTopic}
+                          onChange={(e) =>
+                            setDraftAlertConfig((p) => ({ ...p, ntfyTopic: e.target.value }))
+                          }
+                          placeholder="e.g., perfumehub-soad-orders"
+                          className="w-full border border-[#1A1A1A]/20 px-3.5 py-2.5 text-xs font-mono focus:border-[#C5A059] focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="bg-[#FAF9F6] border border-[#1A1A1A]/10 p-3 text-[11px] text-[#666666]">
+                        Webhook endpoint:{' '}
+                        <span className="font-mono text-[#1A1A1A] break-all">
+                          https://ntfy.sh/{draftAlertConfig.ntfyTopic.trim() || 'your-topic'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Controls + Hardcode Snippet */}
+                    <div className="lg:col-span-2 border border-[#1A1A1A]/15 bg-white p-5 space-y-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <button
+                          type="submit"
+                          className="px-5 py-2.5 bg-[#121212] text-[#FAF9F6] text-xs font-semibold uppercase tracking-wider hover:bg-[#C5A059] hover:text-[#121212] transition-colors"
+                        >
+                          Save Phone Settings
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={sendingTest}
+                          onClick={handleSendTestNotification}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#C5A059] text-[#121212] text-xs font-semibold uppercase tracking-wider hover:bg-[#121212] hover:text-[#FAF9F6] disabled:opacity-50 transition-colors"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          {sendingTest
+                            ? 'Sending Test Alert...'
+                            : 'Send Test Notification to My Phone'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(configCodeSnippet, 'config')}
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-[#121212] text-xs font-semibold uppercase tracking-wider hover:bg-[#121212] hover:text-[#FAF9F6] transition-colors"
+                        >
+                          {copiedMode === 'config' ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          {copiedMode === 'config' ? 'Copied Config Code' : 'Copy Config Code'}
+                        </button>
+                      </div>
+
+                      <div>
+                        <span className="block text-[11px] uppercase tracking-[0.14em] text-[#666666] mb-1.5">
+                          Vercel Production Constants (paste into top of src/App.tsx for all public visitors)
+                        </span>
+                        <pre className="bg-[#121212] text-[#C5A059] p-3.5 text-xs font-mono overflow-x-auto leading-relaxed">
+                          {configCodeSnippet}
+                        </pre>
+                      </div>
+                    </div>
+                  </form>
                 </div>
               )}
             </div>

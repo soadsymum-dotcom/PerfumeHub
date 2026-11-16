@@ -65,6 +65,41 @@ export interface CartItem {
   quantity: number;
 }
 
+export type OrderStatus = 'Pending' | 'Confirmed' | 'Delivered';
+export type DeliveryArea = 'inside-dhaka' | 'outside-dhaka';
+export type PaymentMethod = 'Cash on Delivery' | 'bKash' | 'Nagad';
+
+export interface OrderItemSummary {
+  productId: string;
+  name: string;
+  size: SizeOption;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface OrderRecord {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  customerName: string;
+  phone: string;
+  deliveryArea: DeliveryArea;
+  deliveryFee: number;
+  address: string;
+  paymentMethod: PaymentMethod;
+  items: OrderItemSummary[];
+  subtotal: number;
+  total: number;
+  status: OrderStatus;
+  isRead: boolean;
+}
+
+export interface PhoneAlertConfig {
+  tgBotToken: string;
+  tgChatId: string;
+  ntfyTopic: string;
+}
+
 export interface CategoryShowcaseItem {
   id: string;
   title: string;
@@ -117,6 +152,6 @@ export const USP_PILLARS: { index: string; title: string; detail: string }[] = [
     index: '04',
     title: 'Fast Delivery Inside & Outside Dhaka',
     detail:
-      '24–48 hour express dispatch inside Dhaka (৳60) and 48–72 hour nationwide Cash on Delivery across all 64 districts.',
+      '24–48 hour express dispatch inside Dhaka (৳70) and 48–72 hour nationwide Cash on Delivery across all 64 districts.',
   },
 ];
